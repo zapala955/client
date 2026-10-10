@@ -18,6 +18,7 @@ import net.client.visuals.render.RenderUtils;
 import net.client.visuals.render.TextLabel;
 import net.client.visuals.render.anim.Smooth;
 import net.client.visuals.render.anim.Spring;
+import net.client.visuals.render.camera.PhotoMode;
 import net.client.visuals.render.camera.Showcase;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
@@ -216,7 +217,7 @@ public final class DynamicIslandElement extends HudModule {
 	public static float bossBarShift(float screenW, float screenH) {
 		DynamicIslandElement island = instance;
 		HudTheme theme = HudManager.theme();
-		if (island == null || !island.isEnabled() || theme == null || !theme.isEnabled() || Showcase.hudHidden()) {
+		if (island == null || !island.isEnabled() || theme == null || !theme.isEnabled() || Showcase.hudHidden() || PhotoMode.hudHidden()) {
 			return 0f;
 		}
 		Minecraft minecraft = Minecraft.getInstance();

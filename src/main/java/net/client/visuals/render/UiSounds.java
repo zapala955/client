@@ -26,6 +26,10 @@ public final class UiSounds {
 	public static final SoundEvent CLOSE = event("ui.close");
 	public static final SoundEvent TICK = event("ui.tick");
 	public static final SoundEvent WAKE = event("ui.wake");
+	/** Photo Mode: a DSLR shutter (mirror slap, then the second curtain), synthesised by {@code tools/camera_sounds.py}. */
+	public static final SoundEvent SHUTTER = event("camera.shutter");
+	/** Photo Mode: the focus-confirm "bip-bip". */
+	public static final SoundEvent FOCUS = event("camera.focus");
 
 	private static final long HOVER_GAP_NANOS = 45_000_000L;
 	private static final long TICK_GAP_NANOS = 28_000_000L;
@@ -85,6 +89,14 @@ public final class UiSounds {
 			lastTick = now;
 			play(TICK, 0.85f + 0.4f * (float) Math.clamp(position, 0.0, 1.0));
 		}
+	}
+
+	public static void shutter() {
+		playVaried(SHUTTER, 1f, 0.02f);
+	}
+
+	public static void focus() {
+		play(FOCUS, 1f);
 	}
 
 	/** The main menu's wake chime – once per game launch. */

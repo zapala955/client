@@ -27,6 +27,7 @@ import net.client.visuals.hud.island.DynamicIslandElement;
 import net.client.visuals.module.render.AmbienceModule;
 import net.client.visuals.module.render.AtmosphereModule;
 import net.client.visuals.module.render.BloomModule;
+import net.client.visuals.module.player.PhotoModeModule;
 import net.client.visuals.module.player.ShowcaseModule;
 import net.client.visuals.module.render.AmbientOcclusionModule;
 import net.client.visuals.module.render.HandChamsModule;
@@ -106,6 +107,7 @@ public final class ModuleManager {
 		register(new AmbientOcclusionModule());
 		register(new DepthOfFieldModule());
 		register(new ShowcaseModule());
+		register(new PhotoModeModule());
 		register(new WavingPlantsModule());
 		register(new HudTheme());
 		register(new MusicElement());
@@ -220,7 +222,7 @@ public final class ModuleManager {
 						setting.load(value);
 					}
 				}
-				if (json.has("enabled")) {
+				if (json.has("enabled") && module.savesState()) {
 					module.setEnabled(json.get("enabled").getAsBoolean());
 				}
 				if (json.has("key") && json.get("key").isJsonPrimitive()) {
@@ -239,7 +241,7 @@ public final class ModuleManager {
 		JsonObject root = new JsonObject();
 		for (Module module : MODULES) {
 			JsonObject json = new JsonObject();
-			json.addProperty("enabled", module.isEnabled());
+			json.addProperty("enabled", module.savesState() && module.isEnabled());
 			if (module.keybind() != Module.NO_KEY) {
 				json.addProperty("key", module.keybind());
 			}

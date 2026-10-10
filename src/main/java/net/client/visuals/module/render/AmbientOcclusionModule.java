@@ -16,7 +16,6 @@ import net.client.visuals.module.setting.NumberSetting;
  */
 public final class AmbientOcclusionModule extends Module {
 	public static final String[] QUALITY = {"performance", "balanced", "ultra"};
-	public static final int ULTRA = 2;
 
 	public final NumberSetting strength = add(new NumberSetting("strength", "liquidclient.ambient_occlusion.strength", 0, 200, 5, 100)
 			.suffix("%"));

@@ -4,6 +4,7 @@ import com.llamalad7.mixinextras.sugar.Local;
 import net.client.visuals.gui.LiquidScreen;
 import net.client.visuals.render.BackdropCapture;
 import net.client.visuals.render.hand.HandChams;
+import net.client.visuals.render.post.PhotoCapture;
 import net.client.visuals.render.post.PostFx;
 import net.client.visuals.render.shader.BlurEngine;
 import net.minecraft.client.Minecraft;
@@ -75,6 +76,8 @@ public abstract class GameRendererMixin {
 	@Inject(method = "render", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/renderer/GameRenderer;applyPostEffects()V"))
 	private void liquid$grade(CallbackInfo ci) {
 		PostFx.beforePostEffects();
+		// Photo Mode exposes the finished, graded frame (before vanilla's post effects and the GUI).
+		PhotoCapture.frame();
 	}
 
 	/** Frame copy for blurred HUD glass: everything but the GUI is in the main target now. */

@@ -54,7 +54,7 @@ uniform sampler2D DepthSampler;
 uniform sampler2D FocusSampler;
 #endif
 
-// Mirrors PostFx#writeDof (std140, mat4 + 6 x vec4).
+// Mirrors PostFx#writeDof (std140, mat4 + 7 x vec4).
 layout(std140) uniform LiquidDof {
     mat4 InvProj;  // NDC -> view space (camera at the origin, looking down -z)
     vec4 Lens;     // x CoC per diopter (half-res px), y largest CoC (half-res px), z near blur (0/1), w focus mode (0 auto, 1 manual, 2 tilt-shift)
@@ -62,7 +62,8 @@ layout(std140) uniform LiquidDof {
     vec4 Bokeh;    // x shape (0 circle, 1 hexagon, 2 anamorphic, 3 cat's eye), y highlight expansion (0..0.9), z fringing, w most taps
     vec4 Screen;   // xy full-resolution size, zw half-resolution size
     vec4 Tiles;    // xy tile texture size, z tile size (half-res texels), w dilation reach (tiles)
-    vec4 View;     // x aspect (w / h), y cat's eye amount, z focus assist (0 off, 1 peaking, 2 CoC map), w unused
+    vec4 View;     // x aspect (w / h), y cat's eye amount, z focus assist (0 off, 1 peaking, 2 CoC map), w noise seed (Photo Mode)
+    vec4 Point;    // xy where autofocus looks (uv: the centre, or Photo Mode's focus point), zw unused
 };
 
 layout(location = 0) in vec2 texCoord;
@@ -135,12 +136,12 @@ void main() {
         // The crosshair decides what's in focus; the samples around it on the same surface steady it
         // (a single pixel flickers between a block and what's behind it), the rest are ignored.
         vec2 scale = vec2(1.0 / View.x, 1.0);
-        float centre = diopters(vec2(0.5), texture(DepthSampler, vec2(0.5)).r);
+        float centre = diopters(Point.xy, texture(DepthSampler, Point.xy).r);
         float tolerance = 0.2 * centre + 0.004;
         float sum = 0.0;
         float weight = 0.0;
         for (int i = 0; i < AF_POINTS; i++) {
-            vec2 uv = vec2(0.5) + AF[i] * scale;
+            vec2 uv = clamp(Point.xy + AF[i] * scale, vec2(0.001), vec2(0.999));
             float d = diopters(uv, texture(DepthSampler, uv).r);
             float off = (d - centre) / tolerance;
             float w = AF_WEIGHT[i == 0 ? 0 : (i < 7 ? 1 : 2)] * exp(-off * off);
@@ -308,7 +309,8 @@ void main() {
     vec2 barrel = shape == 3 ? fromCentre * View.y : vec2(0.0);
     vec3 fringeFar = vec3(1.0 - Bokeh.z, 1.0 + Bokeh.z, 1.0 - Bokeh.z);  // green rims behind the focus
     vec3 fringeNear = vec3(1.0 + Bokeh.z, 1.0 - Bokeh.z, 1.0 + Bokeh.z); // magenta rims in front of it
-    float rotation = ign(gl_FragCoord.xy) * TAU;
+    // A new pattern every frame of a Photo Mode exposure, so averaging them removes the noise.
+    float rotation = ign(gl_FragCoord.xy + View.w * vec2(5.588238, 3.71)) * TAU;
     float layer = max(1.0, 0.1 * abs(cc));
     float own = abs(cc);
 

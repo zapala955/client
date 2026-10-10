@@ -154,6 +154,22 @@ shader wallpapers, a keybind-activated ClickGUI, a module system and the first v
   longer lens, with a breath of handheld drift, letterbox bars and a glass name card, HUD hidden.
   Drag the mouse to orbit (with easing), scroll to zoom; the camera pulls in in front of walls.
   Distance, height, focus point, speed and direction, lens, transition time, exit when moving.
+* **Photo Mode** (Player, F4) – a camera in Minecraft. In singleplayer the world freezes (entities,
+  particles, rain mid-air, the clock; sounds pause) while a camera floats out of your eyes like a drone
+  on a gimbal: WASD where you look, Space / Sneak up and down, Sprint for speed, Alt for precision,
+  eased by the smoothing; Q / E tilt it (a Dutch angle), it never passes through blocks and stays within
+  range of your character (12 blocks on servers). A real lens: 12–200 mm (wheel, number keys 1–6 for
+  14 / 24 / 35 / 50 / 85 / 135 mm; the field of view and mouse speed follow), Depth of Field with
+  aperture f/1.2–f/22, focus at the centre, where you click, or a manual distance, and bokeh shapes.
+  Exposure, contrast, 12 film filters, warmth, saturation, vignette and grain on top of Color Grading;
+  custom time of day and weather; hide your player. The viewfinder: aspect masks (16:9, 3:2, 4:3, 1:1,
+  21:9, 9:16), rule-of-thirds / golden-ratio / cross grids, a level that turns yellow when straight,
+  the focus reticle with the distance to the subject, a status bar, a live RGB histogram with clipping
+  warnings, lens chips and the shutter. Tab opens the studio – every setting in a glass sidebar, click
+  the view to focus. The shutter waits for the camera to come to rest, then averages 8 / 16 / 32
+  frames rendered with sub-pixel jitter and new noise seeds in linear light (anti-aliased, Depth of
+  Field and AO noise gone), crops to the aspect ratio and saves a PNG to the screenshots folder, with
+  a synthesised DSLR shutter sound, a blink and a thumbnail.
 * **Zoom** (Utility) – hold C: a smooth, frame-rate independent zoom (factor and speed), scroll to
   zoom further, sensitivity that follows the zoom, optional cinematic camera.
 * **Rainbows** (Render) – when a real rain clears and the sun comes out, a rainbow arcs across the sky
@@ -171,9 +187,11 @@ shader wallpapers, a keybind-activated ClickGUI, a module system and the first v
 * **Ambient Occlusion** (Render) – soft contact shadows where light can't reach: in corners, where
   blocks meet, under leaves and overhangs, around mobs' feet. Horizon-based (HBAO) from the depth
   buffer: per pixel, the horizon the surrounding geometry raises above the surface in several rotated
-  directions, then a depth-aware blur and upsample so edges stay crisp. Only the opaque world is
-  shaded (water, glass, particles, weather and the hand are untouched), and it fades out with distance.
-  Strength, radius, contrast, quality (half resolution, or full on Ultra) and a preview of the AO alone.
+  directions, then a depth-aware blur and upsample so edges stay crisp. Half resolution, from linear
+  depth with smaller copies for the far taps (like XeGTAO's depth MIPs), so a big radius near the camera
+  stays cache-friendly: about 1–1.4 ms on a GTX 1650 at 1080p. Only the opaque world is shaded (water,
+  glass, particles, weather and the hand are untouched), and it fades out with distance. Strength,
+  radius, contrast, quality (4, 6 or 8 directions × steps) and a preview of the AO alone.
 * **Depth of Field** (Render) – the world through a real camera lens: what you look at stays sharp,
   everything nearer or further melts into soft blur, and lamps, lava, stars and the sun bloom into
   bokeh discs – circles, six-bladed hexagons, anamorphic ovals or vintage cat's eyes that turn into

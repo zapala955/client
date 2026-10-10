@@ -18,12 +18,15 @@ import net.client.visuals.render.chunk.ChunkAnimator;
 import net.client.visuals.render.lyrics.WorldLyrics;
 import net.client.visuals.render.particle.AmbientParticles;
 import net.client.visuals.render.weather.LiquidWeather;
+import net.client.visuals.module.player.PhotoModeModule;
 import net.client.visuals.module.player.ShowcaseModule;
+import net.client.visuals.render.camera.PhotoMode;
 import net.client.visuals.render.camera.Showcase;
 import net.client.visuals.render.hand.HandChams;
 import net.client.visuals.render.post.Rainbow;
 import net.client.visuals.render.post.WetLens;
 import net.client.visuals.render.post.WetWorld;
+import net.client.visuals.render.post.PhotoCapture;
 import net.client.visuals.render.post.PostFx;
 import net.client.visuals.render.sky.LiquidSky;
 import net.client.visuals.render.text.SharpText;
@@ -89,6 +92,9 @@ public final class LiquidClient implements ClientModInitializer {
 	/** Showcase: the cinematic third-person camera, on and off. */
 	public static final KeyMapping SHOWCASE = new KeyMapping(
 			"key.liquidclient.showcase", InputConstants.Type.KEYBOARD, InputConstants.KEY_F6, CATEGORY);
+	/** Photo Mode: a camera in Minecraft, on and off (F4; vanilla only uses it with F3). */
+	public static final KeyMapping PHOTO_MODE = new KeyMapping(
+			"key.liquidclient.photo_mode", InputConstants.Type.KEYBOARD, InputConstants.KEY_F4, CATEGORY);
 	public static final KeyMapping MEDIA_PLAY_PAUSE = unbound("key.liquidclient.media_toggle");
 	public static final KeyMapping MEDIA_NEXT = unbound("key.liquidclient.media_next");
 	public static final KeyMapping MEDIA_PREVIOUS = unbound("key.liquidclient.media_previous");
@@ -118,6 +124,7 @@ public final class LiquidClient implements ClientModInitializer {
 		KeyMappingHelper.registerKeyMapping(ZOOM);
 		KeyMappingHelper.registerKeyMapping(OPEN_HUD_EDITOR);
 		KeyMappingHelper.registerKeyMapping(SHOWCASE);
+		KeyMappingHelper.registerKeyMapping(PHOTO_MODE);
 		KeyMappingHelper.registerKeyMapping(MEDIA_PLAY_PAUSE);
 		KeyMappingHelper.registerKeyMapping(MEDIA_NEXT);
 		KeyMappingHelper.registerKeyMapping(MEDIA_PREVIOUS);
@@ -137,8 +144,14 @@ public final class LiquidClient implements ClientModInitializer {
 				}
 			}
 			while (SHOWCASE.consumeClick()) {
-				if (minecraft.gui.screen() == null && minecraft.level != null) {
+				if (minecraft.gui.screen() == null && minecraft.level != null && !PhotoMode.active()) {
 					ModuleManager.get(ShowcaseModule.class).toggle();
+				}
+			}
+			while (PHOTO_MODE.consumeClick()) {
+				// Leaving is handled by Photo Mode itself (the key never reaches here while it's open).
+				if (minecraft.gui.screen() == null && minecraft.level != null && minecraft.player != null) {
+					ModuleManager.get(PhotoModeModule.class).setEnabled(true);
 				}
 			}
 			while (MEDIA_PLAY_PAUSE.consumeClick()) {
@@ -160,6 +173,7 @@ public final class LiquidClient implements ClientModInitializer {
 			Rainbow.tick(minecraft);
 			HudManager.tick(minecraft);
 			Showcase.tick(minecraft);
+			PhotoMode.tick(minecraft);
 			ModuleManager.clientTick(minecraft);
 			MediaBridge.tick();
 		});
@@ -192,6 +206,7 @@ public final class LiquidClient implements ClientModInitializer {
 		ClientPlayConnectionEvents.DISCONNECT.register((listener, minecraft) -> minecraft.execute(() -> {
 			LiquidSky.onWorldExit();
 			PostFx.release();
+			PhotoCapture.release();
 			LiquidWeather.release();
 			WetLens.reset();
 			WetWorld.reset();
@@ -205,6 +220,7 @@ public final class LiquidClient implements ClientModInitializer {
 			LiquidConfig.save();
 			LiquidSky.release();
 			PostFx.release();
+			PhotoCapture.release();
 			LiquidWeather.release();
 			BackgroundEngine.INSTANCE.release();
 			BootArt.release();

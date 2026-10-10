@@ -45,7 +45,7 @@ public final class GradingLook {
 	}
 
 	/** The look's 19 parameters (see {@link #LOOKS}). */
-	static float[] get(int index) {
+	public static float[] get(int index) {
 		return LOOKS[Math.floorMod(index, LOOKS.length)];
 	}
 }

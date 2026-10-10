@@ -41,6 +41,6 @@ public final class ShowcaseModule extends Module {
 	public final BooleanSetting exitOnMove = add(new BooleanSetting("exit_on_move", "liquidclient.showcase.exit_on_move", false));
 
 	public ShowcaseModule() {
-		super("showcase", Category.PLAYER, 0xE064);
+		super("showcase", Category.PLAYER, 0xE1A5);
 	}
 }

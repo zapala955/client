@@ -5,6 +5,7 @@ import net.client.visuals.module.Module;
 import net.client.visuals.module.setting.BooleanSetting;
 import net.client.visuals.module.setting.ModeSetting;
 import net.client.visuals.module.setting.NumberSetting;
+import net.client.visuals.render.camera.PhotoMode;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.world.level.Level;
@@ -109,6 +110,10 @@ public final class AmbienceModule extends Module {
 
 	/** Clock ticks into the day to show (0 = 06:00, as in vanilla), or -1 to keep the server's. */
 	public static long dayTicks() {
+		long photo = PhotoMode.dayTicks();
+		if (photo >= 0L) {
+			return photo; // Photo Mode's time of day
+		}
 		AmbienceModule m = instance;
 		if (m == null || !m.isEnabled() || !m.customTime.get()) {
 			return -1L;
@@ -124,6 +129,10 @@ public final class AmbienceModule extends Module {
 
 	/** Rain level the client renders; {@code original} is the server's. */
 	public static float rainLevel(float original) {
+		float photo = PhotoMode.rain();
+		if (photo >= 0f) {
+			return photo;
+		}
 		AmbienceModule m = instance;
 		if (m == null || !m.isEnabled() || !m.overriding) {
 			if (m != null) {
@@ -135,6 +144,10 @@ public final class AmbienceModule extends Module {
 	}
 
 	public static float thunderLevel(float original) {
+		float photo = PhotoMode.thunder();
+		if (photo >= 0f) {
+			return photo;
+		}
 		AmbienceModule m = instance;
 		if (m == null || !m.isEnabled() || !m.overriding) {
 			if (m != null) {
@@ -153,6 +166,10 @@ public final class AmbienceModule extends Module {
 
 	/** What falls everywhere instead of what the biome says, or null to follow the biome. */
 	public static Biome.@Nullable Precipitation forcedPrecipitation() {
+		Biome.Precipitation photo = PhotoMode.precipitation();
+		if (photo != null) {
+			return photo;
+		}
 		AmbienceModule m = instance;
 		if (m == null || !m.isEnabled()) {
 			return null;

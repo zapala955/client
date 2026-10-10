@@ -44,5 +44,17 @@
 		"sounds": [
 			{ "name": "liquidclient:ui/wake", "volume": 0.4 }
 		]
+	},
+	"camera.shutter": {
+		"subtitle": "subtitles.liquidclient.camera.shutter",
+		"sounds": [
+			{ "name": "liquidclient:camera/shutter", "volume": 0.7 }
+		]
+	},
+	"camera.focus": {
+		"subtitle": "subtitles.liquidclient.camera.focus",
+		"sounds": [
+			{ "name": "liquidclient:camera/focus", "volume": 0.32 }
+		]
 	}
 }

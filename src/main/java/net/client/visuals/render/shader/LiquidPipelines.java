@@ -481,6 +481,14 @@ public final class LiquidPipelines {
 			.withUniform("DepthSampler", UniformType.COMBINED_IMAGE_SAMPLER)
 			.build();
 
+	public static final BindGroupLayout AO_HORIZON_INPUTS = BindGroupLayout.builder()
+			.withUniform("LiquidAo", UniformType.UNIFORM_BUFFER)
+			.withUniform("DepthSampler", UniformType.COMBINED_IMAGE_SAMPLER)
+			.withUniform("Depth1Sampler", UniformType.COMBINED_IMAGE_SAMPLER)
+			.withUniform("Depth2Sampler", UniformType.COMBINED_IMAGE_SAMPLER)
+			.withUniform("Depth3Sampler", UniformType.COMBINED_IMAGE_SAMPLER)
+			.build();
+
 	public static final BindGroupLayout AO_INPUTS = BindGroupLayout.builder()
 			.withUniform("LiquidAo", UniformType.UNIFORM_BUFFER)
 			.withUniform("InSampler", UniformType.COMBINED_IMAGE_SAMPLER)
@@ -492,8 +500,20 @@ public final class LiquidPipelines {
 			.withUniform("DepthSampler", UniformType.COMBINED_IMAGE_SAMPLER)
 			.build();
 
-	/** Horizon search: visibility and view distance into a half-float texture. */
-	public static final RenderPipeline POST_AO = post("pipeline/post_ao", "core/post_ao", AO_DEPTH_INPUTS)
+	/** The depth buffer as linear depth at AO resolution (float). */
+	public static final RenderPipeline POST_AO_LINEARIZE = post("pipeline/post_ao_linearize", "core/post_ao", AO_DEPTH_INPUTS)
+			.withShaderDefine("LINEARIZE")
+			.withColorTargetState(new ColorTargetState(Optional.empty(), GpuFormat.R32_FLOAT, ColorTargetState.WRITE_ALL))
+			.build();
+
+	/** A half-size copy of the linear depth (the AO's far taps read these). */
+	public static final RenderPipeline POST_AO_DOWNSAMPLE = post("pipeline/post_ao_downsample", "core/post_ao", AO_DEPTH_INPUTS)
+			.withShaderDefine("DOWNSAMPLE")
+			.withColorTargetState(new ColorTargetState(Optional.empty(), GpuFormat.R32_FLOAT, ColorTargetState.WRITE_ALL))
+			.build();
+
+	/** Horizon search: visibility and linear depth into a half-float texture. */
+	public static final RenderPipeline POST_AO = post("pipeline/post_ao", "core/post_ao", AO_HORIZON_INPUTS)
 			.withShaderDefine("AO")
 			.withColorTargetState(new ColorTargetState(Optional.empty(), GpuFormat.RGBA16_FLOAT, ColorTargetState.WRITE_ALL))
 			.build();
@@ -577,6 +597,49 @@ public final class LiquidPipelines {
 	public static final RenderPipeline POST_DOF_COMPOSITE = post("pipeline/post_dof_composite", "core/post_dof", DOF_COMPOSITE_INPUTS)
 			.withShaderDefine("COMPOSITE")
 			.withColorTargetState(ColorTargetState.DEFAULT)
+			.build();
+
+	// ---- Photo Mode (render.post.PhotoCapture) --------------------------------------------------
+
+	public static final BindGroupLayout PHOTO_FIRST_INPUTS = BindGroupLayout.builder()
+			.withUniform("LiquidPhoto", UniformType.UNIFORM_BUFFER)
+			.withUniform("InSampler", UniformType.COMBINED_IMAGE_SAMPLER)
+			.build();
+
+	public static final BindGroupLayout PHOTO_ACCUMULATE_INPUTS = BindGroupLayout.builder()
+			.withUniform("LiquidPhoto", UniformType.UNIFORM_BUFFER)
+			.withUniform("InSampler", UniformType.COMBINED_IMAGE_SAMPLER)
+			.withUniform("AccSampler", UniformType.COMBINED_IMAGE_SAMPLER)
+			.build();
+
+	public static final BindGroupLayout PHOTO_RESOLVE_INPUTS = BindGroupLayout.builder()
+			.withUniform("LiquidPhoto", UniformType.UNIFORM_BUFFER)
+			.withUniform("AccSampler", UniformType.COMBINED_IMAGE_SAMPLER)
+			.build();
+
+	/** The first frame of a photo into the float sum (linear light). */
+	public static final RenderPipeline PHOTO_ACCUMULATE_FIRST = post("pipeline/photo_accumulate_first", "core/photo", PHOTO_FIRST_INPUTS)
+			.withShaderDefine("ACCUMULATE")
+			.withShaderDefine("FIRST")
+			.withColorTargetState(new ColorTargetState(Optional.empty(), GpuFormat.RGBA32_FLOAT, ColorTargetState.WRITE_ALL))
+			.build();
+
+	/** Every further frame: the sum so far plus this frame, into the other float texture. */
+	public static final RenderPipeline PHOTO_ACCUMULATE = post("pipeline/photo_accumulate", "core/photo", PHOTO_ACCUMULATE_INPUTS)
+			.withShaderDefine("ACCUMULATE")
+			.withColorTargetState(new ColorTargetState(Optional.empty(), GpuFormat.RGBA32_FLOAT, ColorTargetState.WRITE_ALL))
+			.build();
+
+	/** The average, dithered, into an 8-bit texture that's read back and saved. */
+	public static final RenderPipeline PHOTO_RESOLVE = post("pipeline/photo_resolve", "core/photo", PHOTO_RESOLVE_INPUTS)
+			.withShaderDefine("RESOLVE")
+			.withColorTargetState(new ColorTargetState(Optional.empty(), GpuFormat.RGBA8_UNORM, ColorTargetState.WRITE_ALL))
+			.build();
+
+	/** The frame at 64 × 36 for the viewfinder's histogram. */
+	public static final RenderPipeline PHOTO_HISTOGRAM = post("pipeline/photo_histogram", "core/photo", PHOTO_FIRST_INPUTS)
+			.withShaderDefine("HISTOGRAM")
+			.withColorTargetState(new ColorTargetState(Optional.empty(), GpuFormat.RGBA8_UNORM, ColorTargetState.WRITE_ALL))
 			.build();
 
 	private LiquidPipelines() {

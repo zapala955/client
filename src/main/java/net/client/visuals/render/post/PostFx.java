@@ -24,8 +24,10 @@ import net.client.visuals.module.render.DepthOfFieldModule;
 import net.client.visuals.module.render.MotionBlurModule;
 import net.client.visuals.module.render.RainbowsModule;
 import net.client.visuals.module.render.WetWorldModule;
+import net.client.visuals.module.player.PhotoModeModule;
 import net.client.visuals.module.render.SunRaysModule;
 import net.client.visuals.render.ColorUtil;
+import net.client.visuals.render.camera.PhotoMode;
 import net.client.visuals.render.shader.LiquidPipelines;
 import net.client.visuals.render.shader.ShaderPacks;
 import net.client.visuals.render.shader.ShaderSupport;
@@ -56,8 +58,9 @@ import java.util.function.Supplier;
  * <ul>
  *   <li>Ambient Occlusion, then Wet World – {@link #beforeTranslucents} / {@link #beforeOit}: over the
  *       opaque world, before water, particles and weather (with classic transparency the main pass is
- *       closed and reopened around them, like the haze below). AO: horizon search at half (or full)
- *       resolution, two depth-aware blurs, a depth-aware upsample multiplied into the frame.</li>
+ *       closed and reopened around them, like the haze below). AO: linear depth at half resolution
+ *       with three smaller copies, the horizon search (far taps read the small copies), two
+ *       depth-aware blurs, a depth-aware upsample multiplied into the frame.</li>
  *   <li>Atmosphere, in two steps so particles stay crisp (they write no depth, so a single haze
  *       over the finished world would fog them as if they were as far as the terrain behind them):
  *       <ol>
@@ -108,6 +111,7 @@ public final class PostFx {
 	private static final Supplier<String> WET_LABEL = () -> "Liquid wet world";
 	private static final Supplier<String> RAINBOW_LABEL = () -> "Liquid rainbow";
 	private static final Supplier<String> MOTION_LABEL = () -> "Liquid motion blur";
+	private static final Supplier<String> AO_DEPTH_LABEL = () -> "Liquid ambient occlusion depth";
 	private static final Supplier<String> AO_LABEL = () -> "Liquid ambient occlusion";
 	private static final Supplier<String> AO_BLUR_LABEL = () -> "Liquid ambient occlusion blur";
 	private static final Supplier<String> AO_APPLY_LABEL = () -> "Liquid ambient occlusion apply";
@@ -130,11 +134,14 @@ public final class PostFx {
 	private static final Matrix4f MOTION_VIEW_PROJECTION = new Matrix4f();
 	private static final Matrix4f MOTION_INVERSE = new Matrix4f();
 	private static final Matrix4f PREVIOUS_VIEW_PROJECTION = new Matrix4f();
-	private static final FloatBlock AO = new FloatBlock(8);
+	private static final FloatBlock AO = new FloatBlock(9);
 	private static final Matrix4f AO_INVERSE = new Matrix4f();
 	private static final GpuTexture[] AO_TEXTURES = new GpuTexture[2];
 	private static final GpuTextureView[] AO_VIEWS = new GpuTextureView[2];
-	private static final FloatBlock DOF = new FloatBlock(10);
+	/** Linear depth for AO: its own resolution, then 1/2, 1/4 and 1/8 of it. */
+	private static final GpuTexture[] AO_DEPTH = new GpuTexture[4];
+	private static final GpuTextureView[] AO_DEPTH_VIEWS = new GpuTextureView[4];
+	private static final FloatBlock DOF = new FloatBlock(11);
 	private static final Matrix4f DOF_INVERSE = new Matrix4f();
 	/** Depth of Field, half resolution: the prepared frame (later the filtered blur), the prefiltered frame, the gather. */
 	private static final GpuTexture[] DOF_HALF = new GpuTexture[3];
@@ -492,20 +499,23 @@ public final class PostFx {
 		GpuTextureView depth = target.getDepthTextureView();
 		Matrix4f projection = frameProjection;
 		boolean preview = m != null && m.preview.get();
+		CompiledRenderPipeline linearize = compiled(LiquidPipelines.POST_AO_LINEARIZE);
+		CompiledRenderPipeline downsample = compiled(LiquidPipelines.POST_AO_DOWNSAMPLE);
 		CompiledRenderPipeline compute = compiled(LiquidPipelines.POST_AO);
 		CompiledRenderPipeline blurH = compiled(LiquidPipelines.POST_AO_BLUR_H);
 		CompiledRenderPipeline blurV = compiled(LiquidPipelines.POST_AO_BLUR_V);
 		CompiledRenderPipeline apply = compiled(preview ? LiquidPipelines.POST_AO_PREVIEW : LiquidPipelines.POST_AO_APPLY);
-		if (m == null || colorTexture == null || color == null || depth == null || projection == null || compute == null || blurH == null
-				|| blurV == null || apply == null) {
+		if (m == null || colorTexture == null || color == null || depth == null || projection == null || linearize == null || downsample == null
+				|| compute == null || blurH == null || blurV == null || apply == null) {
 			return;
 		}
 		aoIdleFrames = 0;
 		int w = colorTexture.getWidth(0);
 		int h = colorTexture.getHeight(0);
-		boolean full = m.quality.index() == AmbientOcclusionModule.ULTRA;
-		int aw = full ? w : Math.max(1, w / 2);
-		int ah = full ? h : Math.max(1, h / 2);
+		// Half resolution at every quality: with the depth-aware upsample it looks like full resolution
+		// at a quarter of the cost (full resolution took ~10 ms on a GTX 1650 at 1080p).
+		int aw = Math.max(1, w / 2);
+		int ah = Math.max(1, h / 2);
 		ensureAoTextures(aw, ah);
 
 		AO_INVERSE.set(projection).invert();
@@ -519,11 +529,13 @@ public final class PostFx {
 		};
 		int steps = switch (m.quality.index()) {
 			case 0 -> 4;
-			case 2 -> 7;
+			case 2 -> 8;
 			default -> 6;
 		};
 		AO.vec4(6, directions, steps, 40f, 72f);
-		AO.vec4(7, w, h, 0f, 0f);
+		// Full / AO resolution, and the largest radius on screen: a quarter of its height.
+		AO.vec4(7, w, h, 2f, ah * 0.25f);
+		AO.vec4(8, PhotoCapture.noiseSeed(), 0f, 0f, 0f);
 		DynamicGpuDataStorageMapped<FloatBlock> ring = aoRing;
 		if (ring == null) {
 			ring = aoRing = new DynamicGpuDataStorageMapped<>("Liquid ambient occlusion UBO", AO.size(), GpuBuffer.USAGE_UNIFORM, 1);
@@ -532,7 +544,20 @@ public final class PostFx {
 		GpuBufferSlice slice = ring.writeData(AO);
 		CommandEncoder encoder = RenderSystem.getDevice().createCommandEncoder();
 		GpuSampler nearest = RenderSystem.getSamplerCache().getClampToEdge(FilterMode.NEAREST);
-		aoPass(encoder, AO_LABEL, compute, slice, AO_VIEWS[0], null, depth, nearest);
+		aoPass(encoder, AO_DEPTH_LABEL, linearize, slice, AO_DEPTH_VIEWS[0], null, depth, nearest);
+		for (int i = 1; i < AO_DEPTH.length; i++) {
+			aoPass(encoder, AO_DEPTH_LABEL, downsample, slice, AO_DEPTH_VIEWS[i], null, AO_DEPTH_VIEWS[i - 1], nearest);
+		}
+		try (RenderPass pass = encoder.createRenderPass(AO_LABEL, AO_VIEWS[0], Optional.empty())) {
+			pass.setPipeline(compute);
+			RenderSystem.bindDefaultUniforms(pass);
+			pass.setUniform("LiquidAo", slice);
+			pass.setUniform("DepthSampler", AO_DEPTH_VIEWS[0], nearest);
+			pass.setUniform("Depth1Sampler", AO_DEPTH_VIEWS[1], nearest);
+			pass.setUniform("Depth2Sampler", AO_DEPTH_VIEWS[2], nearest);
+			pass.setUniform("Depth3Sampler", AO_DEPTH_VIEWS[3], nearest);
+			pass.draw(3, 1, 0, 0);
+		}
 		aoPass(encoder, AO_BLUR_LABEL, blurH, slice, AO_VIEWS[1], AO_VIEWS[0], null, nearest);
 		aoPass(encoder, AO_BLUR_LABEL, blurV, slice, AO_VIEWS[0], AO_VIEWS[1], null, nearest);
 		aoPass(encoder, AO_APPLY_LABEL, apply, slice, color, AO_VIEWS[0], depth, nearest);
@@ -560,26 +585,23 @@ public final class PostFx {
 		}
 		releaseAoTextures();
 		GpuDevice device = RenderSystem.getDevice();
+		int usage = GpuTexture.USAGE_RENDER_ATTACHMENT | GpuTexture.USAGE_TEXTURE_BINDING;
 		for (int i = 0; i < 2; i++) {
-			AO_TEXTURES[i] = device.createTexture(() -> "Liquid ambient occlusion", GpuTexture.USAGE_RENDER_ATTACHMENT | GpuTexture.USAGE_TEXTURE_BINDING,
-					GpuFormat.RGBA16_FLOAT, w, h, 1, 1);
+			AO_TEXTURES[i] = device.createTexture(() -> "Liquid ambient occlusion", usage, GpuFormat.RGBA16_FLOAT, w, h, 1, 1);
 			AO_VIEWS[i] = device.createTextureView(AO_TEXTURES[i]);
+		}
+		for (int i = 0; i < AO_DEPTH.length; i++) {
+			AO_DEPTH[i] = device.createTexture(() -> "Liquid ambient occlusion depth", usage, GpuFormat.R32_FLOAT, Math.max(1, w >> i),
+					Math.max(1, h >> i), 1, 1);
+			AO_DEPTH_VIEWS[i] = device.createTextureView(AO_DEPTH[i]);
 		}
 		aoWidth = w;
 		aoHeight = h;
 	}
 
 	private static void releaseAoTextures() {
-		for (int i = 0; i < 2; i++) {
-			if (AO_VIEWS[i] != null) {
-				AO_VIEWS[i].close();
-				AO_VIEWS[i] = null;
-			}
-			if (AO_TEXTURES[i] != null) {
-				AO_TEXTURES[i].close();
-				AO_TEXTURES[i] = null;
-			}
-		}
+		closeAll(AO_TEXTURES, AO_VIEWS);
+		closeAll(AO_DEPTH, AO_DEPTH_VIEWS);
 		aoIdleFrames = 0;
 	}
 
@@ -592,7 +614,9 @@ public final class PostFx {
 			m = depthOfField = ModuleManager.get(DepthOfFieldModule.class);
 		}
 		Matrix4f projection = frameProjection;
-		if (!m.isEnabled() || !ShaderSupport.dof() || ShaderPacks.inUse() || projection == null || frameCamera == null) {
+		// In Photo Mode only the camera's own depth of field counts (off = everything sharp).
+		boolean wanted = PhotoMode.active() ? PhotoMode.depthOfField() : m.isEnabled();
+		if (!wanted || !ShaderSupport.dof() || ShaderPacks.inUse() || projection == null || frameCamera == null) {
 			return false;
 		}
 		RenderTarget target = Minecraft.getInstance().gameRenderer.mainRenderTarget();
@@ -644,34 +668,50 @@ public final class PostFx {
 	}
 
 	private static GpuBufferSlice writeDof(DepthOfFieldModule m, Matrix4f projection, int w, int h, int hw, int hh) {
+		// Photo Mode's camera drives the lens while it's open (its focal length is the field of view itself).
+		boolean photo = PhotoMode.depthOfField();
+		PhotoModeModule p = PhotoMode.module();
+
 		// Autofocus eases like a focus ring being turned (frame-rate independent); a fresh start snaps.
 		long now = System.nanoTime();
 		float dt = dofNanos < 0L ? 0f : Math.min(0.25f, (now - dofNanos) * 1.0e-9f);
 		dofNanos = now;
-		float ease = !dofFocusValid || dt <= 0f ? 1f : 1f - (float) Math.exp(-m.focusSpeed.get() * dt);
+		float speed = photo ? 9f : m.focusSpeed.getFloat();
+		float ease = !dofFocusValid || dt <= 0f ? 1f : 1f - (float) Math.exp(-speed * dt);
 
 		DOF_INVERSE.set(projection).invert();
 		DOF.mat4(0, DOF_INVERSE);
 		// A thin lens on a full-frame sensor (24 mm tall): the blur circle's radius is f² / (2 N · 24 mm)
 		// image heights per diopter. Zooming in (a narrower field of view than the setting) is a longer lens.
-		double fov = Math.toRadians(Minecraft.getInstance().options.fov().get());
-		float zoom = Math.clamp(Math.abs(projection.m11()) * (float) Math.tan(fov * 0.5), 0.5f, 10f);
-		float focal = m.focalLength.getFloat() * 0.001f * zoom;
-		float perDiopter = focal * focal / (2f * m.aperture.getFloat() * 0.024f) * hh;
-		float maxCoc = Math.min(48f, m.maxBlur.getFloat() / 100f * hh);
-		DOF.vec4(4, perDiopter, maxCoc, m.nearBlur.get() ? 1f : 0f, m.focusMode.index());
-		DOF.vec4(5, 1f / m.focusDistance.getFloat(), ease, m.tiltPosition.getFloat() / 100f, m.tiltWidth.getFloat() / 200f);
+		float focal;
+		if (photo) {
+			focal = PhotoMode.focal() * 0.001f;
+		} else {
+			double fov = Math.toRadians(Minecraft.getInstance().options.fov().get());
+			float zoom = Math.clamp(Math.abs(projection.m11()) * (float) Math.tan(fov * 0.5), 0.5f, 10f);
+			focal = m.focalLength.getFloat() * 0.001f * zoom;
+		}
+		float aperture = photo ? p.aperture.getFloat() : m.aperture.getFloat();
+		float perDiopter = focal * focal / (2f * aperture * 0.024f) * hh;
+		float maxCoc = Math.min(48f, (photo ? 4.5f : m.maxBlur.getFloat()) / 100f * hh);
+		int mode = photo ? (p.focusMode.index() == PhotoModeModule.FOCUS_MANUAL ? 1 : 0) : m.focusMode.index();
+		float distance = photo ? p.focusDistance.getFloat() : m.focusDistance.getFloat();
+		DOF.vec4(4, perDiopter, maxCoc, photo || m.nearBlur.get() ? 1f : 0f, mode);
+		DOF.vec4(5, 1f / distance, ease, m.tiltPosition.getFloat() / 100f, m.tiltWidth.getFloat() / 200f);
 		// Highlights: up to 31× brighter at full white (30 · s^1.5); fringing: ±12 % CoC per channel at most.
-		float highlights = m.highlights.getFloat() / 100f;
-		int taps = switch (m.quality.index()) {
+		float highlights = photo ? 0.6f : m.highlights.getFloat() / 100f;
+		float fringing = photo ? 0.25f : m.fringing.getFloat() / 100f;
+		int taps = photo ? (PhotoCapture.holdsCamera() ? 128 : 64) : switch (m.quality.index()) {
 			case 0 -> 32;
 			case 2 -> 128;
 			default -> 64;
 		};
-		DOF.vec4(6, m.bokeh.index(), 30f * highlights * (float) Math.sqrt(highlights), m.fringing.getFloat() / 100f * 0.12f, taps);
+		int bokeh = photo ? p.bokeh.index() : m.bokeh.index();
+		DOF.vec4(6, bokeh, 30f * highlights * (float) Math.sqrt(highlights), fringing * 0.12f, taps);
 		DOF.vec4(7, w, h, hw, hh);
 		DOF.vec4(8, (hw + DOF_TILE - 1) / DOF_TILE, (hh + DOF_TILE - 1) / DOF_TILE, DOF_TILE, Math.min(6, (int) Math.ceil(maxCoc / DOF_TILE)));
-		DOF.vec4(9, w / (float) Math.max(1, h), 0.75f, m.focusAssist.index(), 0f);
+		DOF.vec4(9, w / (float) Math.max(1, h), 0.75f, photo ? 0f : m.focusAssist.index(), PhotoCapture.noiseSeed());
+		DOF.vec4(10, photo ? PhotoMode.focusU() : 0.5f, photo ? PhotoMode.focusV() : 0.5f, 0f, 0f);
 		DynamicGpuDataStorageMapped<FloatBlock> ring = dofRing;
 		if (ring == null) {
 			ring = dofRing = new DynamicGpuDataStorageMapped<>("Liquid depth of field UBO", DOF.size(), GpuBuffer.USAGE_UNIFORM, 1);
@@ -962,7 +1002,7 @@ public final class PostFx {
 		double y = camera.pos.y;
 		double z = camera.pos.z;
 		try {
-			if (color == null || !m.isEnabled() || !ShaderSupport.motion() || ShaderPacks.inUse() || Minecraft.getInstance().isPaused()
+			if (color == null || !m.isEnabled() || PhotoMode.active() || !ShaderSupport.motion() || ShaderPacks.inUse() || Minecraft.getInstance().isPaused()
 					|| !previousValid || dt <= 0f || dt > 0.25f) {
 				return;
 			}
@@ -1256,7 +1296,7 @@ public final class PostFx {
 			g = grading = ModuleManager.get(ColorGradingModule.class);
 			b = bloom = ModuleManager.get(BloomModule.class);
 		}
-		boolean grade = g.isEnabled() && ShaderSupport.grade();
+		boolean grade = (g.isEnabled() || PhotoMode.active()) && ShaderSupport.grade();
 		boolean glow = b.isEnabled() && ShaderSupport.bloom();
 		boolean lens = WetLens.advance(Minecraft.getInstance().isPaused()) && ShaderSupport.lens();
 		if (!grade && !glow && !lens) {
@@ -1289,7 +1329,7 @@ public final class PostFx {
 
 			int levels = glow ? bloom(encoder, b, w, h, linear) : 0;
 
-			writeGrade(grade ? g : null, glow ? b : null, levels);
+			writeGrade(grade && g.isEnabled() ? g : null, glow ? b : null, levels);
 			DynamicGpuDataStorageMapped<FloatBlock> ring = gradeRing;
 			if (ring == null) {
 				ring = gradeRing = new DynamicGpuDataStorageMapped<>("Liquid grade UBO", GRADE.size(), GpuBuffer.USAGE_UNIFORM, 1);
@@ -1353,10 +1393,17 @@ public final class PostFx {
 		}
 	}
 
+	/**
+	 * The grade: Color Grading's, with Photo Mode's camera on top while it's open – its filter (when
+	 * one is chosen) replaces the look, exposure adds in stops, contrast and saturation multiply,
+	 * warmth adds to the temperature, vignette and grain take the stronger of the two.
+	 */
 	private static void writeGrade(@Nullable ColorGradingModule g, @Nullable BloomModule b, int levels) {
 		float bloomIntensity = b != null && levels > 0 ? b.intensity.getFloat() / 100f * 1.6f / levels : 0f;
-		float seed = ((System.nanoTime() - START) * 1.0e-9f) % 1000f;
-		if (g == null) {
+		// Film grain holds still while a photo exposes, or averaging its frames would wash it out.
+		float seed = PhotoCapture.holdsCamera() ? 17.31f : ((System.nanoTime() - START) * 1.0e-9f) % 1000f;
+		PhotoModeModule p = PhotoMode.active() ? PhotoMode.module() : null;
+		if (g == null && p == null) {
 			// Bloom alone: an identity grade that only adds the glow.
 			GRADE.vec4(0, 0f, 0f, 0f, 0f);
 			GRADE.vec4(1, 1f, 1f, 1f, 1f);
@@ -1369,27 +1416,33 @@ public final class PostFx {
 			GRADE.vec4(8, 0f, 0f, 0f, 0f);
 			return;
 		}
-		int lookIndex = g.look.index();
+		boolean photoLook = p != null && p.filter.index() != 0;
+		int lookIndex = photoLook ? p.filter.index() : g != null ? g.look.index() : 0;
 		float[] look = GradingLook.get(lookIndex);
-		float strength = lookIndex == 0 ? 0f : g.lookStrength.getFloat() / 100f;
+		float strength = lookIndex == 0 ? 0f : (photoLook ? p.filterStrength.getFloat() : g.lookStrength.getFloat()) / 100f;
 		GRADE.vec4(0, look[0], look[1], look[2], strength);
 		GRADE.vec4(1, look[3], look[4], look[5], look[10]);
 		GRADE.vec4(2, look[6], look[7], look[8], look[9]);
 		GRADE.vec4(3, look[12], look[13], look[14], look[18]);
 		GRADE.vec4(4, look[15], look[16], look[17], look[11]);
-		GRADE.vec4(5, (float) Math.pow(2.0, g.exposure.get() / 100.0), g.contrast.getFloat() / 100f,
-				g.saturation.getFloat() / 100f, g.vibrance.getFloat() / 100f);
+		double exposure = (g != null ? g.exposure.get() / 100.0 : 0.0) + (p != null ? p.exposure.get() : 0.0);
+		float contrast = (g != null ? g.contrast.getFloat() / 100f : 1f) * (p != null ? p.contrast.getFloat() / 100f : 1f);
+		float saturation = (g != null ? g.saturation.getFloat() / 100f : 1f) * (p != null ? p.saturation.getFloat() / 100f : 1f);
+		GRADE.vec4(5, (float) Math.pow(2.0, exposure), contrast, saturation, g != null ? g.vibrance.getFloat() / 100f : 0f);
 		// White balance: temperature along blue–amber, tint along green–magenta, brightness kept.
-		float t = g.temperature.getFloat() / 100f;
-		float m = g.tint.getFloat() / 100f;
+		float t = Math.clamp((g != null ? g.temperature.getFloat() : 0f) + (p != null ? p.warmth.getFloat() : 0f), -100f, 100f) / 100f;
+		float m = g != null ? g.tint.getFloat() / 100f : 0f;
 		float wr = 1f + 0.1f * t + 0.03f * m;
 		float wg = 1f - 0.1f * m;
 		float wb = 1f - 0.14f * t + 0.03f * m;
 		float norm = 1f / (0.2126f * wr + 0.7152f * wg + 0.0722f * wb);
-		GRADE.vec4(6, wr * norm, wg * norm, wb * norm, g.toneCurve.index());
-		GRADE.vec4(7, g.shadows.getFloat() / 100f, g.highlights.getFloat() / 100f, bloomIntensity, seed);
-		GRADE.vec4(8, g.vignette.getFloat() / 100f, g.grain.getFloat() / 100f, g.aberration.getFloat() / 100f,
-				g.sharpen.getFloat() / 100f);
+		// Without Color Grading the tone curve stays as it would be without the camera.
+		int toneCurve = g != null ? g.toneCurve.index() : bloomIntensity > 0f ? 1 : 0;
+		GRADE.vec4(6, wr * norm, wg * norm, wb * norm, toneCurve);
+		GRADE.vec4(7, g != null ? g.shadows.getFloat() / 100f : 0f, g != null ? g.highlights.getFloat() / 100f : 0f, bloomIntensity, seed);
+		float vignette = Math.max(g != null ? g.vignette.getFloat() : 0f, p != null ? p.vignette.getFloat() : 0f) / 100f;
+		float grain = Math.max(g != null ? g.grain.getFloat() : 0f, p != null ? p.grain.getFloat() : 0f) / 100f;
+		GRADE.vec4(8, vignette, grain, g != null ? g.aberration.getFloat() / 100f : 0f, g != null ? g.sharpen.getFloat() / 100f : 0f);
 	}
 
 	// ---- Resources -----------------------------------------------------------------------------

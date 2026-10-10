@@ -1,5 +1,6 @@
 package net.client.visuals.hud;
 
+import net.client.visuals.render.camera.PhotoMode;
 import net.client.visuals.render.camera.Showcase;
 import net.client.visuals.gui.hud.HudEditorScreen;
 import net.client.visuals.module.Category;
@@ -74,7 +75,8 @@ public final class HudManager {
 			return; // the editor draws (and times) the elements itself
 		}
 		time = (time + dt) % 3600f;
-		if (theme == null || !theme.isEnabled() || minecraft.player == null || minecraft.gui.hud.isHidden() || Showcase.hudHidden()) {
+		if (theme == null || !theme.isEnabled() || minecraft.player == null || minecraft.gui.hud.isHidden() || Showcase.hudHidden()
+				|| PhotoMode.hudHidden()) {
 			return;
 		}
 		if (theme.hideInDebug.get() && minecraft.getDebugOverlay().showDebugScreen()) {

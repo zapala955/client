@@ -1,6 +1,7 @@
 package net.client.visuals.module.utility;
 
 import net.client.visuals.LiquidClient;
+import net.client.visuals.render.camera.PhotoMode;
 import net.client.visuals.module.Category;
 import net.client.visuals.module.Module;
 import net.client.visuals.module.setting.BooleanSetting;
@@ -59,7 +60,8 @@ public final class ZoomModule extends Module {
 		}
 		float dt = m.timer.tick();
 		Minecraft minecraft = Minecraft.getInstance();
-		boolean down = m.isEnabled() && minecraft.gui.screen() == null && LiquidClient.ZOOM.isDown();
+		// Photo Mode has its own lens.
+		boolean down = m.isEnabled() && minecraft.gui.screen() == null && LiquidClient.ZOOM.isDown() && !PhotoMode.active();
 		if (!down) {
 			m.scrollFactor = 1f;
 		}

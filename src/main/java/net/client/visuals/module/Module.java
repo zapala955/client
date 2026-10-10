@@ -103,6 +103,11 @@ public abstract class Module {
 		return category != Category.HUD;
 	}
 
+	/** Whether being on is saved and restored at launch (off for modes like Photo Mode, which start on demand). */
+	public boolean savesState() {
+		return true;
+	}
+
 	/** Shown in the HUD's module list (off for HUD elements and other plumbing). */
 	public boolean listed() {
 		return category != Category.HUD;

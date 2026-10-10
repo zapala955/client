@@ -49,6 +49,7 @@ public final class ShaderSupport {
 	private static boolean motion;
 	private static boolean ao;
 	private static boolean dof;
+	private static boolean photo;
 
 	private ShaderSupport() {
 	}
@@ -81,12 +82,15 @@ public final class ShaderSupport {
 		wet = compiles(LiquidPipelines.POST_WET);
 		handChams = compiles(LiquidPipelines.HAND_CHAMS) && compiles(LiquidPipelines.OIT_HAND_CHAMS);
 		motion = compiles(LiquidPipelines.POST_MOTION);
-		ao = compiles(LiquidPipelines.POST_AO) && compiles(LiquidPipelines.POST_AO_BLUR_H) && compiles(LiquidPipelines.POST_AO_BLUR_V)
+		ao = compiles(LiquidPipelines.POST_AO_LINEARIZE) && compiles(LiquidPipelines.POST_AO_DOWNSAMPLE)
+				&& compiles(LiquidPipelines.POST_AO) && compiles(LiquidPipelines.POST_AO_BLUR_H) && compiles(LiquidPipelines.POST_AO_BLUR_V)
 				&& compiles(LiquidPipelines.POST_AO_APPLY) && compiles(LiquidPipelines.POST_AO_PREVIEW);
 		dof = compiles(LiquidPipelines.POST_DOF_FOCUS) && compiles(LiquidPipelines.POST_DOF_PREPARE) && compiles(LiquidPipelines.POST_DOF_TILE)
 				&& compiles(LiquidPipelines.POST_DOF_DILATE) && compiles(LiquidPipelines.POST_DOF_PREFILTER)
 				&& compiles(LiquidPipelines.POST_DOF_GATHER) && compiles(LiquidPipelines.POST_DOF_FILTER)
 				&& compiles(LiquidPipelines.POST_DOF_COMPOSITE);
+		photo = compiles(LiquidPipelines.PHOTO_ACCUMULATE_FIRST) && compiles(LiquidPipelines.PHOTO_ACCUMULATE)
+				&& compiles(LiquidPipelines.PHOTO_RESOLVE) && compiles(LiquidPipelines.PHOTO_HISTOGRAM);
 		bloom = grade && compiles(LiquidPipelines.POST_BLOOM_PREFILTER) && compiles(LiquidPipelines.POST_BLOOM_DOWNSAMPLE)
 				&& compiles(LiquidPipelines.POST_BLOOM_UPSAMPLE);
 		if ((!sdf || !backdrops) && !warned) {
@@ -212,6 +216,11 @@ public final class ShaderSupport {
 	/** Depth of Field (every pass) can be drawn. */
 	public static boolean dof() {
 		return dof;
+	}
+
+	/** Photo Mode's supersampled capture and histogram can run (otherwise: single-frame photos, no histogram). */
+	public static boolean photo() {
+		return photo;
 	}
 
 	/** HUD panels can blur the game behind them. */
