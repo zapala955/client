@@ -1,0 +1,28 @@
+{
+  "providers": [
+    {
+      "type": "ttf",
+      "file": "liquidclient:inter-latin-600.ttf",
+      "size": 12.0,
+      "oversample": 2.0,
+      "shift": [
+        0.0,
+        1.7
+      ]
+    },
+    {
+      "type": "ttf",
+      "file": "liquidclient:inter-latin-ext-600.ttf",
+      "size": 12.0,
+      "oversample": 2.0,
+      "shift": [
+        0.0,
+        1.7
+      ]
+    },
+    {
+      "type": "reference",
+      "id": "minecraft:default"
+    }
+  ]
+}

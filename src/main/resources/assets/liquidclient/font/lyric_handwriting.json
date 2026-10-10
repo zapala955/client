@@ -1,0 +1,18 @@
+{
+  "providers": [
+    {
+      "type": "ttf",
+      "file": "liquidclient:lyrics/handwriting.ttf",
+      "size": 30.0,
+      "oversample": 4.0,
+      "shift": [
+        0.0,
+        14.2
+      ]
+    },
+    {
+      "type": "reference",
+      "id": "minecraft:default"
+    }
+  ]
+}

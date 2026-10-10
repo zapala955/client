@@ -1,0 +1,31 @@
+{
+	"schemaVersion": 1,
+	"id": "liquidclient",
+	"version": "${version}",
+	"name": "Liquid Client",
+	"description": "Liquid Glass visual framework: custom main menu and ClickGUI.",
+	"authors": [
+		"zapal"
+	],
+	"license": "All-Rights-Reserved",
+	"icon": "assets/liquidclient/icon.png",
+	"environment": "client",
+	"entrypoints": {
+		"client": [
+			"net.client.visuals.LiquidClient"
+		]
+	},
+	"mixins": [
+		"liquidclient.mixins.json"
+	],
+	"accessWidener": "liquidclient.classtweaker",
+	"depends": {
+		"fabricloader": ">=0.19.5",
+		"minecraft": "~26.3",
+		"java": ">=25",
+		"fabric-api": "*"
+	},
+	"suggests": {
+		"modmenu": "*"
+	}
+}

@@ -1,0 +1,16 @@
+classTweaker v1 official
+
+# Custom GuiElementRenderStates must be submitted straight into the frame's GuiRenderState and
+# must respect the active scissor, exactly like vanilla's own ColoredRectangleRenderState.
+accessible field net/minecraft/client/gui/GuiGraphicsExtractor guiRenderState Lnet/minecraft/client/renderer/state/gui/GuiRenderState;
+accessible field net/minecraft/client/gui/GuiGraphicsExtractor scissorStack Lnet/minecraft/client/gui/GuiGraphicsExtractor$ScissorStack;
+accessible class net/minecraft/client/gui/GuiGraphicsExtractor$ScissorStack
+
+# Lets BlurEngine check whether something already claimed this frame's (single) blur pass,
+# instead of letting GuiRenderState throw "Can only blur once per frame".
+accessible field net/minecraft/client/renderer/state/gui/GuiRenderState firstStratumAfterBlur I
+
+# Hand Chams swaps a render type for its own that keeps the original texture (Sampler0).
+accessible field net/minecraft/client/renderer/rendertype/RenderType state Lnet/minecraft/client/renderer/rendertype/RenderSetup;
+accessible field net/minecraft/client/renderer/rendertype/RenderSetup textures Ljava/util/Map;
+accessible class net/minecraft/client/renderer/rendertype/RenderSetup$TextureBinding

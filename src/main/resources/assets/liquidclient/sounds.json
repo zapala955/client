@@ -1,0 +1,48 @@
+{
+	"ui.click": {
+		"subtitle": "subtitles.liquidclient.ui.click",
+		"sounds": [
+			{ "name": "liquidclient:ui/click1", "volume": 0.42 },
+			{ "name": "liquidclient:ui/click2", "volume": 0.42 },
+			{ "name": "liquidclient:ui/click3", "volume": 0.42 },
+			{ "name": "liquidclient:ui/click4", "volume": 0.38 }
+		]
+	},
+	"ui.hover": {
+		"sounds": [
+			{ "name": "liquidclient:ui/hover", "volume": 0.16 }
+		]
+	},
+	"ui.toggle_on": {
+		"subtitle": "subtitles.liquidclient.ui.toggle",
+		"sounds": [
+			{ "name": "liquidclient:ui/toggle_on", "volume": 0.3 }
+		]
+	},
+	"ui.toggle_off": {
+		"subtitle": "subtitles.liquidclient.ui.toggle",
+		"sounds": [
+			{ "name": "liquidclient:ui/toggle_off", "volume": 0.28 }
+		]
+	},
+	"ui.open": {
+		"sounds": [
+			{ "name": "liquidclient:ui/open", "volume": 0.38 }
+		]
+	},
+	"ui.close": {
+		"sounds": [
+			{ "name": "liquidclient:ui/close", "volume": 0.34 }
+		]
+	},
+	"ui.tick": {
+		"sounds": [
+			{ "name": "liquidclient:ui/tick", "volume": 0.2 }
+		]
+	},
+	"ui.wake": {
+		"sounds": [
+			{ "name": "liquidclient:ui/wake", "volume": 0.4 }
+		]
+	}
+}

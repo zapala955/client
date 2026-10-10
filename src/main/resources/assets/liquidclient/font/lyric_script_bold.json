@@ -1,0 +1,18 @@
+{
+  "providers": [
+    {
+      "type": "ttf",
+      "file": "liquidclient:lyrics/script_bold.ttf",
+      "size": 30.0,
+      "oversample": 4.0,
+      "shift": [
+        0.0,
+        14.63
+      ]
+    },
+    {
+      "type": "reference",
+      "id": "minecraft:default"
+    }
+  ]
+}

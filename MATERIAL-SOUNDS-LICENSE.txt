@@ -1,0 +1,17 @@
+Liquid Client's interface sounds (assets/liquidclient/sounds/ui/*.ogg) are made from
+"Sound resources" by Google (Material Design), https://m2.material.io/design/sound/sound-resources.html
+licensed under Creative Commons Attribution 4.0 International (CC BY 4.0):
+https://creativecommons.org/licenses/by/4.0/
+
+Changes: silence trimmed, the switch sounds shortened with a fade-out, a common gain applied,
+re-encoded as Ogg Vorbis (tools/ui_sounds.py).
+
+Sounds used:
+  click1-4    ui_tap-variant-01 .. 04
+  hover       navigation_hover-tap
+  toggle_on   state-change_confirm-up
+  toggle_off  state-change_confirm-down
+  open        navigation_forward-selection-minimal
+  close       navigation_backward-selection-minimal
+  tick        ui_tap-variant-02
+  wake        notification_ambient
