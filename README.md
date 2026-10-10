@@ -234,8 +234,9 @@ shader wallpapers, a keybind-activated ClickGUI, a module system and the first v
   content waits for the shape, then fades and scales in, clipped to the island, and a repeat alert
   bumps it instead. Black (with a rim light so it reads at night) or Liquid Glass (the game behind
   it, blurred and refracted at the rim). The shape is one signed distance field (`island.fsh`):
-  body and bubble joined by a smooth minimum whose reach shrinks as the gap opens. Each activity can
-  be turned off; alert duration and scale are adjustable.
+  body and bubble joined by a smooth minimum whose reach shrinks as the gap opens. Boss bars move
+  down to clear the pill while it sits at the top centre. Each activity can be turned off; alert
+  duration and scale are adjustable.
 * **Music** – Spotify (or any player) from the Windows media session via a small PowerShell bridge
   (`media/now_playing.ps1`, no Spotify account or app key). Six layouts: Card, Compact, Dynamic
   Island, Vinyl, Ambient (album glow), Minimal. Album art is looked up by title + artist from the

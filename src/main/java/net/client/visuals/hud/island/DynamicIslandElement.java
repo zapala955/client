@@ -3,6 +3,7 @@ package net.client.visuals.hud.island;
 import net.client.visuals.hud.HudContext;
 import net.client.visuals.hud.HudManager;
 import net.client.visuals.hud.HudModule;
+import net.client.visuals.hud.HudTheme;
 import net.client.visuals.hud.element.ClockElement;
 import net.client.visuals.hud.element.MusicElement;
 import net.client.visuals.module.Module;
@@ -17,6 +18,7 @@ import net.client.visuals.render.RenderUtils;
 import net.client.visuals.render.TextLabel;
 import net.client.visuals.render.anim.Smooth;
 import net.client.visuals.render.anim.Spring;
+import net.client.visuals.render.camera.Showcase;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.multiplayer.ClientLevel;
@@ -205,6 +207,34 @@ public final class DynamicIslandElement extends HudModule {
 		island.toggle.set(module, I18n.get("liquidclient.notification.enabled"), I18n.get("liquidclient.notification.disabled"));
 		island.post(island.toggle);
 		return true;
+	}
+
+	/**
+	 * How far vanilla's boss bars move down to clear the island (GUI units; 0 when it's elsewhere,
+	 * hidden or off). They clear the compact pill: an expanded alert covers them for its few seconds.
+	 */
+	public static float bossBarShift(float screenW, float screenH) {
+		DynamicIslandElement island = instance;
+		HudTheme theme = HudManager.theme();
+		if (island == null || !island.isEnabled() || theme == null || !theme.isEnabled() || Showcase.hudHidden()) {
+			return 0f;
+		}
+		Minecraft minecraft = Minecraft.getInstance();
+		if (theme.hideInDebug.get() && minecraft.getDebugOverlay().showDebugScreen()) {
+			return 0f;
+		}
+		float s = island.scaleFactor();
+		float x = island.screenX(screenW);
+		float centre = screenW * 0.5f;
+		// Boss bars are 182 wide, centred; their names are drawn from y = 3.
+		if (x > centre + 92f || x + island.width * s < centre - 92f) {
+			return 0f;
+		}
+		float y = island.screenY(screenH);
+		if (y > 40f) {
+			return 0f;
+		}
+		return Math.max(0f, y + IslandDraw.COMPACT_H * s - 1f) * island.opacity.get();
 	}
 
 	/** The local player attacked {@code entity} (client thread). */
