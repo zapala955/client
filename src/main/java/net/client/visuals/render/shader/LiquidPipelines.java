@@ -177,6 +177,36 @@ public final class LiquidPipelines {
 			.withColorTargetState(new ColorTargetState(BlendFunction.TRANSLUCENT))
 			.build();
 
+	// ---- GUI: Dynamic Island (render.IslandShape) ----------------------------------------------
+
+	/**
+	 * The island's gooey shape – body and bubble melted together ({@code island.fsh}). Same vertex
+	 * layout as {@link #HUD_BLUR_FORMAT}, with its own meaning:
+	 * <pre>
+	 *  Color     RGBA8_UNORM  fill / shadow colour, or the glass tint; a = opacity
+	 *  UV0       RG32_FLOAT   position relative to the body's centre
+	 *  UV3       RG32_FLOAT   body half width / half height
+	 *  LineWidth R32_FLOAT    body corner radius
+	 *  UV1       RG16_SINT    bubble centre x (from the body's centre) * 16, bubble radius * 16
+	 *  UV2       RG16_SINT    shadow softness / glass blur (device px) * 16, rim light / glass tint * 1000
+	 * </pre>
+	 */
+	public static final RenderPipeline ISLAND = gui("pipeline/island", "core/island", HUD_BLUR_FORMAT)
+			.withColorTargetState(new ColorTargetState(BlendFunction.TRANSLUCENT))
+			.build();
+
+	public static final RenderPipeline ISLAND_SHADOW = gui("pipeline/island_shadow", "core/island", HUD_BLUR_FORMAT)
+			.withShaderDefine("SHADOW")
+			.withColorTargetState(new ColorTargetState(BlendFunction.TRANSLUCENT))
+			.build();
+
+	/** Liquid Glass: blurs a copy of the frame behind it ({@code BackdropCapture}). */
+	public static final RenderPipeline ISLAND_GLASS = gui("pipeline/island_glass", "core/island", HUD_BLUR_FORMAT)
+			.withBindGroupLayout(BindGroupLayouts.SAMPLER0)
+			.withShaderDefine("GLASS")
+			.withColorTargetState(new ColorTargetState(BlendFunction.TRANSLUCENT))
+			.build();
+
 	// ---- World: skybox ------------------------------------------------------------------------
 
 	/** Per-frame sky parameters; layout mirrored by {@code SkyUniforms} and {@code liquid_sky.fsh}. */

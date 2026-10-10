@@ -8,6 +8,7 @@ import net.client.visuals.module.render.KillEffectsModule;
 import net.client.visuals.gui.hud.HudEditorScreen;
 import net.client.visuals.hud.HudManager;
 import net.client.visuals.hud.element.TargetHudElement;
+import net.client.visuals.hud.island.DynamicIslandElement;
 import net.client.visuals.media.AlbumArt;
 import net.client.visuals.media.MediaBridge;
 import net.client.visuals.render.BackdropCapture;
@@ -169,6 +170,7 @@ public final class LiquidClient implements ClientModInitializer {
 			if (level.isClientSide()) {
 				KillEffectsModule.onAttack(entity);
 				TargetHudElement.onAttack(entity);
+				DynamicIslandElement.onAttack(entity);
 			}
 			return InteractionResult.PASS;
 		});

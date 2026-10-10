@@ -23,6 +23,7 @@ import net.client.visuals.hud.element.PotionsElement;
 import net.client.visuals.hud.element.ServerElement;
 import net.client.visuals.hud.element.SpeedElement;
 import net.client.visuals.hud.element.TargetHudElement;
+import net.client.visuals.hud.island.DynamicIslandElement;
 import net.client.visuals.module.render.AmbienceModule;
 import net.client.visuals.module.render.AtmosphereModule;
 import net.client.visuals.module.render.BloomModule;
@@ -124,6 +125,7 @@ public final class ModuleManager {
 		register(new TargetHudElement());
 		register(new ModuleListElement());
 		register(new NotificationsElement());
+		register(new DynamicIslandElement());
 		register(new ZoomModule());
 		register(new BrowserModule());
 		load();
@@ -165,7 +167,10 @@ public final class ModuleManager {
 			Module module = MODULES.get(i);
 			if (module.keybind() == key && module.bindable()) {
 				module.toggle();
-				NotificationsElement.post(module);
+				// The Dynamic Island announces it when it's on; otherwise the Notifications toasts do.
+				if (!DynamicIslandElement.onModuleToggled(module)) {
+					NotificationsElement.post(module);
+				}
 			}
 		}
 	}

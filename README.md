@@ -208,7 +208,7 @@ shader wallpapers, a keybind-activated ClickGUI, a module system and the first v
   (equirectangular) if present, otherwise a generated 4096×2048 galaxy. Disabling cross-fades back
   to vanilla and frees all GPU resources.
 * **HUD + HUD editor** (HUD category, "Edit HUD" in the ClickGUI title bar or the "Open HUD Editor"
-  key) – 17 elements: Music, Lyrics, FPS, Ping, CPS, Coordinates, Speed, Compass, Clock, Memory, Server,
+  key) – 18 elements: Dynamic Island (below), Music, Lyrics, FPS, Ping, CPS, Coordinates, Speed, Compass, Clock, Memory, Server,
   Keystrokes, Armor, Potion Effects, Target HUD (face or spawn egg, animated health bar with a
   trailing damage segment and absorption, distance, armour), Module List (enabled modules as glass
   capsules that slide in from the anchored edge) and Notifications (keybind toggles). 15 styles – Frosted / Vibrant / Liquid Glass Blur (real blur of the game
@@ -217,6 +217,25 @@ shader wallpapers, a keybind-activated ClickGUI, a module system and the first v
   theme with per-element overrides; accent from a colour, animated chroma or the album art. The
   editor drags with snapping (screen edges, centre lines, other elements), scroll resizes, and
   positions are anchored to the nearest screen third so layouts survive resolution changes.
+* **Dynamic Island** (HUD) – a black pill at the top of the screen that comes alive, like the
+  iPhone's. Live activities sit in the compact pill (a glyph at the left end, an accessory at the
+  right): the zoom factor while zooming, the face and health of what you're fighting, a heart that
+  beats faster as your health drops (with a red glow), your air underwater as a ring, and the song
+  that's playing (album art and a level meter in the album's colour). The most important one fills
+  the pill; the next one splits off into a bubble beside it – it pushes out of the pill, pulls a
+  melted neck that thins and snaps, and settles apart. Alerts expand the island for a few seconds
+  and queue up: module toggles (the module's tile and its switch flipping – these replace the
+  Notifications toasts while the island is on), a new song (the Now Playing card: art, title,
+  artist, a timeline), joining a server (name, address and live ping bars), changing dimension,
+  levelling up (a ring filling to your progress), eliminations (the victim's face, with a streak
+  badge for quick kills), gear about to break (the item and what's left) and screenshots (with a
+  thumbnail of the picture). Idle it's a pill, a clock or nothing. Width, height, corners and the
+  bubble move on damped springs (growing overshoots a little and settles, shrinking is snappier);
+  content waits for the shape, then fades and scales in, clipped to the island, and a repeat alert
+  bumps it instead. Black (with a rim light so it reads at night) or Liquid Glass (the game behind
+  it, blurred and refracted at the rim). The shape is one signed distance field (`island.fsh`):
+  body and bubble joined by a smooth minimum whose reach shrinks as the gap opens. Each activity can
+  be turned off; alert duration and scale are adjustable.
 * **Music** – Spotify (or any player) from the Windows media session via a small PowerShell bridge
   (`media/now_playing.ps1`, no Spotify account or app key). Six layouts: Card, Compact, Dynamic
   Island, Vinyl, Ambient (album glow), Minimal. Album art is looked up by title + artist from the

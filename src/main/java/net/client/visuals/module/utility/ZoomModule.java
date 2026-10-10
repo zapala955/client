@@ -70,6 +70,12 @@ public final class ZoomModule extends Module {
 		return z <= 1.0005f ? original : original / z;
 	}
 
+	/** The current zoom factor as eased (1 = not zoomed); the Dynamic Island shows it. */
+	public static float level() {
+		ZoomModule m = instance;
+		return m != null && m.isEnabled() ? m.zoom.get() : 1f;
+	}
+
 	/** Mouse turn multiplier (1 when not zoomed). */
 	public static double turnScale() {
 		ZoomModule m = instance;

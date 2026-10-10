@@ -2,6 +2,7 @@ package net.client.visuals.mixin;
 
 import net.client.visuals.render.BlurPanel;
 import net.client.visuals.render.IconFont;
+import net.client.visuals.render.IslandShape;
 import net.client.visuals.render.RoundedRectState;
 import net.client.visuals.render.background.BackgroundEngine;
 import net.client.visuals.render.text.SharpText;
@@ -23,6 +24,7 @@ public abstract class GuiRenderStateMixin {
 		RoundedRectState.resetPool();
 		IconFont.resetPool();
 		BlurPanel.resetPool();
+		IslandShape.resetPool();
 		SharpText.onFrameReset();
 		BackgroundEngine.resetPool();
 	}

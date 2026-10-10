@@ -33,6 +33,8 @@ public final class ShaderSupport {
 	private static boolean validated;
 	private static boolean glassText;
 	private static boolean hudBlur;
+	private static boolean island;
+	private static boolean islandGlass;
 	private static boolean particles;
 	private static boolean haze;
 	private static boolean hazeTranslucent;
@@ -64,6 +66,8 @@ public final class ShaderSupport {
 		}
 		glassText = sdf && compiles(LiquidPipelines.GLASS_TEXT);
 		hudBlur = sdf && compiles(LiquidPipelines.HUD_BLUR);
+		island = sdf && compiles(LiquidPipelines.ISLAND) && compiles(LiquidPipelines.ISLAND_SHADOW);
+		islandGlass = island && compiles(LiquidPipelines.ISLAND_GLASS);
 		particles = compiles(LiquidPipelines.PARTICLE_GLOW) && compiles(LiquidPipelines.PARTICLE_SOFT)
 				&& compiles(LiquidPipelines.OIT_PARTICLE_GLOW) && compiles(LiquidPipelines.OIT_PARTICLE_SOFT);
 		haze = compiles(LiquidPipelines.POST_HAZE);
@@ -123,6 +127,16 @@ public final class ShaderSupport {
 	/** SDF rounded rectangles can be drawn. */
 	public static boolean sdf() {
 		return sdf;
+	}
+
+	/** The Dynamic Island's melted shape (fill and shadow) can be drawn. */
+	public static boolean island() {
+		return island;
+	}
+
+	/** ...and its Liquid Glass variant. */
+	public static boolean islandGlass() {
+		return islandGlass;
 	}
 
 	/** The glass-text (clock) shader can be used. */
