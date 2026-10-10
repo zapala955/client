@@ -1,3 +1,0 @@
-beforeProject { project ->
-    project.layout.buildDirectory.set(project.file('C:/tmp/asterix-external-screen-build'))
-}
