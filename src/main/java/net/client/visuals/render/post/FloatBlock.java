@@ -36,6 +36,11 @@ public final class FloatBlock implements DynamicGpuDataStorage.DynamicGpuData {
 		vec4(slot + 3, m.m30(), m.m31(), m.m32(), m.m33());
 	}
 
+	/** Copies {@code floats} values from {@code source} into the block, starting at vec4 {@code slot}. */
+	public void copy(int slot, float[] source, int from, int floats) {
+		System.arraycopy(source, from, data, slot * 4, floats);
+	}
+
 	@Override
 	public void write(ByteBuffer buffer) {
 		for (float value : data) {

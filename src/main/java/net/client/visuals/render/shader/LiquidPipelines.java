@@ -599,6 +599,82 @@ public final class LiquidPipelines {
 			.withColorTargetState(ColorTargetState.DEFAULT)
 			.build();
 
+	// ---- World: Storm Chaser (render.storm) ------------------------------------------------------
+
+	/** Once per resource set: the storm's tileable noise texture (no inputs). */
+	public static final RenderPipeline STORM_NOISE = RenderPipeline.builder(RenderPipelines.POST_PROCESSING_SNIPPET)
+			.withLocation(LiquidClient.id("pipeline/storm_noise"))
+			.withVertexShader("core/screenquad")
+			.withFragmentShader(LiquidClient.id("core/storm_sky"))
+			.withShaderDefine("NOISE")
+			.withColorTargetState(new ColorTargetState(Optional.empty(), GpuFormat.RGBA16_FLOAT, ColorTargetState.WRITE_ALL))
+			.build();
+
+	public static final BindGroupLayout STORM_SKY_INPUTS = BindGroupLayout.builder()
+			.withUniform("LiquidStormSky", UniformType.UNIFORM_BUFFER)
+			.withUniform("NoiseSampler", UniformType.COMBINED_IMAGE_SAMPLER)
+			.build();
+
+	public static final BindGroupLayout STORM_COMPOSITE_INPUTS = BindGroupLayout.builder()
+			.withUniform("InSampler", UniformType.COMBINED_IMAGE_SAMPLER)
+			.build();
+
+	/** The storm in the sky, at half (or full) resolution: premultiplied colour and coverage. */
+	public static final RenderPipeline STORM_SKY = post("pipeline/storm_sky", "core/storm_sky", STORM_SKY_INPUTS)
+			.withShaderDefine("SKY")
+			.withColorTargetState(new ColorTargetState(Optional.empty(), GpuFormat.RGBA16_FLOAT, ColorTargetState.WRITE_ALL))
+			.build();
+
+	/** ...blended over the sky (premultiplied: dst · (1 - a) + rgb). */
+	public static final RenderPipeline STORM_SKY_COMPOSITE = post("pipeline/storm_sky_composite", "core/storm_sky", STORM_COMPOSITE_INPUTS)
+			.withShaderDefine("COMPOSITE")
+			.withColorTargetState(new ColorTargetState(BlendFunction.TRANSLUCENT_PREMULTIPLIED_ALPHA))
+			.build();
+
+	public static final BindGroupLayout STORM_BOLT_INPUTS = BindGroupLayout.builder()
+			.withUniform("LiquidBolt", UniformType.UNIFORM_BUFFER)
+			.build();
+
+	/**
+	 * Lightning channels: a static quad buffer whose vertices are (segment, corner), the segments in
+	 * the uniform block. Added light, depth-tested against the world (reverse-Z), no depth write.
+	 */
+	public static final RenderPipeline STORM_BOLT = RenderPipeline.builder()
+			.withLocation(LiquidClient.id("pipeline/storm_bolt"))
+			.withBindGroupLayout(STORM_BOLT_INPUTS)
+			.withVertexShader(LiquidClient.id("core/storm_bolt"))
+			.withFragmentShader(LiquidClient.id("core/storm_bolt"))
+			.withVertexBinding(0, DefaultVertexFormat.POSITION)
+			.withPrimitiveTopology(PrimitiveTopology.QUADS)
+			.withColorTargetState(new ColorTargetState(BlendFunction.ADDITIVE))
+			.withDepthStencilState(new DepthStencilState(CompareOp.GREATER_THAN_OR_EQUAL, false))
+			.withCull(false)
+			.build();
+
+	public static final BindGroupLayout STORM_LIGHT_INPUTS = BindGroupLayout.builder()
+			.withUniform("LiquidStormLight", UniformType.UNIFORM_BUFFER)
+			.withUniform("DepthSampler", UniformType.COMBINED_IMAGE_SAMPLER)
+			.withUniform("ColumnSampler", UniformType.COMBINED_IMAGE_SAMPLER)
+			.build();
+
+	public static final BindGroupLayout STORM_APPLY_INPUTS = BindGroupLayout.builder()
+			.withUniform("LiquidStormLight", UniformType.UNIFORM_BUFFER)
+			.withUniform("DepthSampler", UniformType.COMBINED_IMAGE_SAMPLER)
+			.withUniform("InSampler", UniformType.COMBINED_IMAGE_SAMPLER)
+			.build();
+
+	/** The flash's light on the world, at half (or full) resolution: rgb light, a = distance. */
+	public static final RenderPipeline STORM_LIGHT = post("pipeline/storm_light", "core/storm_light", STORM_LIGHT_INPUTS)
+			.withShaderDefine("LIGHT")
+			.withColorTargetState(new ColorTargetState(Optional.empty(), GpuFormat.RGBA16_FLOAT, ColorTargetState.WRITE_ALL))
+			.build();
+
+	/** Multiplied into the frame: dst · (1 + light · gain). */
+	public static final RenderPipeline STORM_LIGHT_APPLY = post("pipeline/storm_light_apply", "core/storm_light", STORM_APPLY_INPUTS)
+			.withShaderDefine("APPLY")
+			.withColorTargetState(new ColorTargetState(new BlendFunction(BlendFactor.DST_COLOR, BlendFactor.ONE)))
+			.build();
+
 	// ---- Photo Mode (render.post.PhotoCapture) --------------------------------------------------
 
 	public static final BindGroupLayout PHOTO_FIRST_INPUTS = BindGroupLayout.builder()

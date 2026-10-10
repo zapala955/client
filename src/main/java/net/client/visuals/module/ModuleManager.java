@@ -33,6 +33,7 @@ import net.client.visuals.module.render.AmbientOcclusionModule;
 import net.client.visuals.module.render.HandChamsModule;
 import net.client.visuals.module.render.MotionBlurModule;
 import net.client.visuals.module.render.RainbowsModule;
+import net.client.visuals.module.render.StormChaserModule;
 import net.client.visuals.module.render.SunRaysModule;
 import net.client.visuals.module.render.WetWorldModule;
 import net.client.visuals.module.render.WetLensModule;
@@ -102,6 +103,7 @@ public final class ModuleManager {
 		register(new WetLensModule());
 		register(new RainbowsModule());
 		register(new WetWorldModule());
+		register(new StormChaserModule());
 		register(new HandChamsModule());
 		register(new MotionBlurModule());
 		register(new AmbientOcclusionModule());

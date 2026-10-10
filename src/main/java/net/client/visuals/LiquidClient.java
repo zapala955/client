@@ -29,6 +29,13 @@ import net.client.visuals.render.post.WetWorld;
 import net.client.visuals.render.post.PhotoCapture;
 import net.client.visuals.render.post.PostFx;
 import net.client.visuals.render.sky.LiquidSky;
+import net.client.visuals.render.storm.Lightning;
+import net.client.visuals.render.storm.Storm;
+import net.client.visuals.render.storm.StormRenderer;
+import net.client.visuals.render.storm.StormSky;
+import net.client.visuals.render.storm.StormSounds;
+import net.client.visuals.module.render.StormChaserModule;
+import net.client.visuals.hud.element.NotificationsElement;
 import net.client.visuals.render.text.SharpText;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents;
@@ -95,6 +102,8 @@ public final class LiquidClient implements ClientModInitializer {
 	/** Photo Mode: a camera in Minecraft, on and off (F4; vanilla only uses it with F3). */
 	public static final KeyMapping PHOTO_MODE = new KeyMapping(
 			"key.liquidclient.photo_mode", InputConstants.Type.KEYBOARD, InputConstants.KEY_F4, CATEGORY);
+	/** Storm Chaser: call a storm in, or send it away (unbound; the module's own key works too). */
+	public static final KeyMapping STORM = unbound("key.liquidclient.storm");
 	public static final KeyMapping MEDIA_PLAY_PAUSE = unbound("key.liquidclient.media_toggle");
 	public static final KeyMapping MEDIA_NEXT = unbound("key.liquidclient.media_next");
 	public static final KeyMapping MEDIA_PREVIOUS = unbound("key.liquidclient.media_previous");
@@ -125,6 +134,7 @@ public final class LiquidClient implements ClientModInitializer {
 		KeyMappingHelper.registerKeyMapping(OPEN_HUD_EDITOR);
 		KeyMappingHelper.registerKeyMapping(SHOWCASE);
 		KeyMappingHelper.registerKeyMapping(PHOTO_MODE);
+		KeyMappingHelper.registerKeyMapping(STORM);
 		KeyMappingHelper.registerKeyMapping(MEDIA_PLAY_PAUSE);
 		KeyMappingHelper.registerKeyMapping(MEDIA_NEXT);
 		KeyMappingHelper.registerKeyMapping(MEDIA_PREVIOUS);
@@ -154,6 +164,15 @@ public final class LiquidClient implements ClientModInitializer {
 					ModuleManager.get(PhotoModeModule.class).setEnabled(true);
 				}
 			}
+			while (STORM.consumeClick()) {
+				if (minecraft.gui.screen() == null && minecraft.level != null) {
+					StormChaserModule storm = ModuleManager.get(StormChaserModule.class);
+					storm.toggle();
+					if (!DynamicIslandElement.onModuleToggled(storm)) {
+						NotificationsElement.post(storm);
+					}
+				}
+			}
 			while (MEDIA_PLAY_PAUSE.consumeClick()) {
 				MediaBridge.togglePlayPause();
 			}
@@ -171,6 +190,8 @@ public final class LiquidClient implements ClientModInitializer {
 			WetLens.tick(minecraft);
 			WetWorld.tick(minecraft);
 			Rainbow.tick(minecraft);
+			Storm.tick(minecraft);
+			StormSounds.tick(minecraft);
 			HudManager.tick(minecraft);
 			Showcase.tick(minecraft);
 			PhotoMode.tick(minecraft);
@@ -211,6 +232,11 @@ public final class LiquidClient implements ClientModInitializer {
 			WetLens.reset();
 			WetWorld.reset();
 			Rainbow.reset();
+			Storm.reset();
+			Lightning.reset();
+			StormSounds.stop();
+			StormSky.release();
+			StormRenderer.release();
 			HandChams.release();
 			BrowserManager.shutdown(); // the screen belongs to the world it was placed in
 		}));
@@ -222,6 +248,9 @@ public final class LiquidClient implements ClientModInitializer {
 			PostFx.release();
 			PhotoCapture.release();
 			LiquidWeather.release();
+			StormSounds.stop();
+			StormSky.release();
+			StormRenderer.release();
 			BackgroundEngine.INSTANCE.release();
 			BootArt.release();
 			BrowserManager.shutdown();

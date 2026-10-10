@@ -18,6 +18,7 @@ import net.minecraft.client.renderer.oit.OitPipelineSet;
  *   <li>particle shader unavailable → vanilla particle pipeline with vanilla sprites</li>
  *   <li>a post-processing shader unavailable → that effect (haze, bloom, grading) is skipped</li>
  *   <li>weather shader unavailable → vanilla rain and snow</li>
+ *   <li>storm shaders unavailable → vanilla's darkened sky, vanilla's lightning bolt, a lightmap flash</li>
  * </ul>
  *
  * <p>The probe re-runs on every screen {@code init()} (cheap: a map lookup once compiled), which
@@ -50,6 +51,9 @@ public final class ShaderSupport {
 	private static boolean ao;
 	private static boolean dof;
 	private static boolean photo;
+	private static boolean stormSky;
+	private static boolean stormBolts;
+	private static boolean stormLight;
 
 	private ShaderSupport() {
 	}
@@ -91,6 +95,9 @@ public final class ShaderSupport {
 				&& compiles(LiquidPipelines.POST_DOF_COMPOSITE);
 		photo = compiles(LiquidPipelines.PHOTO_ACCUMULATE_FIRST) && compiles(LiquidPipelines.PHOTO_ACCUMULATE)
 				&& compiles(LiquidPipelines.PHOTO_RESOLVE) && compiles(LiquidPipelines.PHOTO_HISTOGRAM);
+		stormSky = compiles(LiquidPipelines.STORM_NOISE) && compiles(LiquidPipelines.STORM_SKY) && compiles(LiquidPipelines.STORM_SKY_COMPOSITE);
+		stormBolts = compiles(LiquidPipelines.STORM_BOLT);
+		stormLight = compiles(LiquidPipelines.STORM_LIGHT) && compiles(LiquidPipelines.STORM_LIGHT_APPLY);
 		bloom = grade && compiles(LiquidPipelines.POST_BLOOM_PREFILTER) && compiles(LiquidPipelines.POST_BLOOM_DOWNSAMPLE)
 				&& compiles(LiquidPipelines.POST_BLOOM_UPSAMPLE);
 		if ((!sdf || !backdrops) && !warned) {
@@ -221,6 +228,21 @@ public final class ShaderSupport {
 	/** Photo Mode's supersampled capture and histogram can run (otherwise: single-frame photos, no histogram). */
 	public static boolean photo() {
 		return photo;
+	}
+
+	/** Storm Chaser's sky (noise, the storm, the composite) can be drawn (otherwise vanilla's darkened sky). */
+	public static boolean stormSky() {
+		return stormSky;
+	}
+
+	/** Storm Chaser's bolts can be drawn (otherwise vanilla's lightning bolt stands in). */
+	public static boolean stormBolts() {
+		return stormBolts;
+	}
+
+	/** Storm Chaser's flash relighting can be drawn (otherwise only the lightmap flashes). */
+	public static boolean stormLight() {
+		return stormLight;
 	}
 
 	/** HUD panels can blur the game behind them. */

@@ -19,6 +19,7 @@ import net.client.visuals.module.render.SkyboxModule;
 import net.client.visuals.render.anim.Motion;
 import net.client.visuals.render.anim.Smooth;
 import net.client.visuals.render.shader.LiquidPipelines;
+import net.client.visuals.render.storm.StormSky;
 import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
@@ -110,26 +111,33 @@ public final class LiquidSky {
 	 * @return {@code true} if we drew the full sky and vanilla should be skipped
 	 */
 	public static boolean beforeVanilla(GpuBufferSlice skyFog, SkyRenderState state) {
-		if (state.skybox != DimensionType.Skybox.OVERWORLD || broken) {
-			return false;
+		StormSky.observe(state);
+		boolean overworld = state.skybox == DimensionType.Skybox.OVERWORLD && !broken;
+		float fade = overworld ? advance() : 0f;
+		// Storm Chaser: deep in a storm's rain core the storm hides the whole sky – no sky beneath it.
+		if (StormSky.coversSky(state)) {
+			StormSky.draw(state);
+			return true;
 		}
-		float fade = advance();
-		if (fade >= FULL) {
+		if (overworld && fade >= FULL) {
 			RenderSystem.setShaderFog(skyFog);
-			return draw(state, 1f);
+			if (draw(state, 1f)) {
+				StormSky.draw(state); // vanilla is cancelled, so the tail hook won't run
+				return true;
+			}
 		}
 		return false;
 	}
 
-	/** Tail of {@code SkyRenderer#render}: translucent overlay while cross-fading. */
+	/** Tail of {@code SkyRenderer#render}: translucent overlay while cross-fading, then a storm over all of it. */
 	public static void afterVanilla(SkyRenderState state) {
-		if (state.skybox != DimensionType.Skybox.OVERWORLD || broken) {
-			return;
+		if (state.skybox == DimensionType.Skybox.OVERWORLD && !broken) {
+			float fade = FADE.get();
+			if (fade > 0.001f && fade < FULL) {
+				draw(state, fade);
+			}
 		}
-		float fade = FADE.get();
-		if (fade > 0.001f && fade < FULL) {
-			draw(state, fade);
-		}
+		StormSky.draw(state);
 	}
 
 	/** Advances timers and the cross-fade once per frame; frees resources once fully faded out. */

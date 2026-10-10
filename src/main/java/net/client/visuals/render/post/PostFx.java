@@ -31,6 +31,10 @@ import net.client.visuals.render.camera.PhotoMode;
 import net.client.visuals.render.shader.LiquidPipelines;
 import net.client.visuals.render.shader.ShaderPacks;
 import net.client.visuals.render.shader.ShaderSupport;
+import net.client.visuals.render.storm.Lightning;
+import net.client.visuals.render.storm.Storm;
+import net.client.visuals.render.storm.StormRenderer;
+import net.client.visuals.render.storm.StormSounds;
 import net.client.visuals.render.weather.LiquidWeather;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
@@ -73,7 +77,10 @@ import java.util.function.Supplier;
  *             only pixels that came nearer since (clouds; with OIT also water and glass) are hazed.
  *             If the first step didn't run, the whole frame is hazed here instead.</li>
  *       </ol></li>
- *   <li>Rainbows – in {@link #afterLevel}, after the haze.</li>
+ *   <li>Storm Chaser's lightning – in {@link #afterLevel}, after the haze: the flash relighting the world,
+ *       then the bolts ({@code render.storm.StormRenderer}). The storm itself advances in
+ *       {@link #beginLevel}; its sky is drawn in the sky pass ({@code render.storm.StormSky}).</li>
+ *   <li>Rainbows – in {@link #afterLevel}, after the haze and the lightning.</li>
  *   <li>Sun Rays – also in {@link #afterLevel}, after the haze and before the hand (so the hand covers
  *       them): a half-resolution sky mask around the sun, two radial blurs towards it and an additive
  *       composite with the lens flare.</li>
@@ -234,6 +241,27 @@ public final class PostFx {
 		frameSky = sky;
 		hazeSlice = null;
 		opaqueHazed = false;
+		// The storm, its lightning and its thunder advance once per frame, before anything draws them.
+		try {
+			Storm.frame(camera.pos.x, camera.pos.y, camera.pos.z);
+			ClientLevel level = Minecraft.getInstance().level;
+			if (level != null) {
+				Lightning.frame(level, camera.pos.x, camera.pos.y, camera.pos.z);
+				StormSounds.frame(level, camera.pos.x, camera.pos.y, camera.pos.z);
+			}
+		} catch (RuntimeException e) {
+			warnOnce(e);
+		}
+	}
+
+	/** This frame's level projection (view bobbing included) while the level renders, else null. */
+	public static @Nullable Matrix4f frameProjection() {
+		return frameProjection;
+	}
+
+	/** This frame's camera while the level renders, else null. */
+	public static @Nullable CameraRenderState frameCamera() {
+		return frameCamera;
 	}
 
 	private static boolean hazeWanted() {
@@ -356,6 +384,11 @@ public final class PostFx {
 					drawHaze(LiquidPipelines.POST_HAZE, HAZE_LABEL, false);
 				}
 			}
+			Matrix4f projection = frameProjection;
+			CameraRenderState camera = frameCamera;
+			if (projection != null && camera != null) {
+				StormRenderer.afterLevel(projection, camera);
+			}
 			drawRainbow();
 			if (!drawSunRays() && RAY_TEXTURES[0] != null && ++raysIdleFrames > IDLE_FRAMES) {
 				releaseRayTextures();
@@ -442,10 +475,12 @@ public final class PostFx {
 			g = mix(g, Math.min(1f, tg * scale), 0.75f);
 			b = mix(b, Math.min(1f, tb * scale), 0.75f);
 		}
-		float density = m.density.getFloat() / 100f;
+		// A storm thickens the air: heavier haze and mist, and more of it allowed.
+		float storm = Storm.haze();
+		float density = Math.min(1f, m.density.getFloat() / 100f + storm * 0.25f);
 		HAZE.vec4(4, r, g, b, density);
 		// Mist reads a little lighter than the haze, like a cloud bank seen from above.
-		float mist = m.mist.getFloat() / 100f * 0.04f;
+		float mist = (m.mist.getFloat() / 100f + storm * 0.6f) * 0.04f;
 		HAZE.vec4(5, mix(r, 1f, 0.22f * luminance + 0.08f), mix(g, 1f, 0.22f * luminance + 0.08f), mix(b, 1f, 0.22f * luminance + 0.08f), mist);
 
 		// Sun glow by day (sunrise / sunset colour when there is one), a faint cool moon glow by night.
@@ -472,7 +507,8 @@ public final class PostFx {
 			HAZE.vec4(6, mix(r, 0.62f, 0.5f), mix(g, 0.7f, 0.5f), mix(b, 0.92f, 0.5f), glow * 0.35f * smoothstep(-0.1f, 0.2f, moonY));
 			HAZE.vec4(7, moonX, moonY, 0f, (float) camera.pos.y);
 		}
-		HAZE.vec4(8, m.haze.getFloat() / 100f * 0.012f, m.hazeStart.getFloat(), m.mistHeight.getFloat(), m.mistThickness.getFloat());
+		HAZE.vec4(8, (m.haze.getFloat() / 100f + storm * 0.9f) * 0.012f, m.hazeStart.getFloat() * (1f - 0.6f * storm), m.mistHeight.getFloat(),
+				m.mistThickness.getFloat() * (1f + storm));
 	}
 
 	// ---- Ambient Occlusion ---------------------------------------------------------------------
