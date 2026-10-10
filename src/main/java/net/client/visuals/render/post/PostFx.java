@@ -20,6 +20,7 @@ import net.client.visuals.module.render.AtmosphereModule;
 import net.client.visuals.module.render.BloomModule;
 import net.client.visuals.module.render.AmbientOcclusionModule;
 import net.client.visuals.module.render.ColorGradingModule;
+import net.client.visuals.module.render.DepthOfFieldModule;
 import net.client.visuals.module.render.MotionBlurModule;
 import net.client.visuals.module.render.RainbowsModule;
 import net.client.visuals.module.render.WetWorldModule;
@@ -49,7 +50,7 @@ import java.util.function.Supplier;
 
 /**
  * The client's own post-processing: Ambient Occlusion, Wet World, Atmosphere (haze and valley mist),
- * Rainbows, Sun Rays, Motion Blur, Wet Lens, Bloom and Color Grading.
+ * Rainbows, Sun Rays, Depth of Field, Motion Blur, Wet Lens, Bloom and Color Grading.
  *
  * <h2>Where in the frame</h2>
  * <ul>
@@ -73,6 +74,10 @@ import java.util.function.Supplier;
  *   <li>Sun Rays – also in {@link #afterLevel}, after the haze and before the hand (so the hand covers
  *       them): a half-resolution sky mask around the sun, two radial blurs towards it and an additive
  *       composite with the lens flare.</li>
+ *   <li>Depth of Field – in {@link #afterLevel}, after the rays: autofocus on the GPU into a 1×1
+ *       texture (eased from last frame's, no read-back), a half-resolution scatter-as-gather bokeh
+ *       with its foreground tiles dilated, then a full-resolution composite from a copy of the frame.
+ *       The hand, drawn after, stays sharp.</li>
  *   <li>Motion Blur – last in {@link #afterLevel}: the world (with its haze, rainbows and rays) is
  *       blurred along each pixel's screen motion, reprojected with last frame's camera; the hand,
  *       drawn after, stays sharp.</li>
@@ -83,7 +88,7 @@ import java.util.function.Supplier;
  *       pass grades and composites back into the frame. The GUI is never graded.</li>
  * </ul>
  *
- * <p>GPU resources (a frame-sized copy, six half-float bloom levels, three uniform rings) are
+ * <p>GPU resources (a frame-sized copy, half-float bloom levels and effect textures, uniform rings) are
  * created on first use, recreated on resize and released after a few seconds without any effect,
  * on world exit and when the client stops – always on the render thread. Each pass is skipped
  * when its pipeline didn't compile ({@link ShaderSupport}); nothing here allocates per frame.</p>
@@ -106,6 +111,9 @@ public final class PostFx {
 	private static final Supplier<String> AO_LABEL = () -> "Liquid ambient occlusion";
 	private static final Supplier<String> AO_BLUR_LABEL = () -> "Liquid ambient occlusion blur";
 	private static final Supplier<String> AO_APPLY_LABEL = () -> "Liquid ambient occlusion apply";
+	private static final Supplier<String> DOF_FOCUS_LABEL = () -> "Liquid depth of field autofocus";
+	private static final Supplier<String> DOF_LABEL = () -> "Liquid depth of field";
+	private static final Supplier<String> DOF_COMPOSITE_LABEL = () -> "Liquid depth of field composite";
 	private static final int MAX_LEVELS = 6;
 	/** Frames without any effect before the textures are freed (~5 s at 60 FPS). */
 	private static final int IDLE_FRAMES = 300;
@@ -126,6 +134,19 @@ public final class PostFx {
 	private static final Matrix4f AO_INVERSE = new Matrix4f();
 	private static final GpuTexture[] AO_TEXTURES = new GpuTexture[2];
 	private static final GpuTextureView[] AO_VIEWS = new GpuTextureView[2];
+	private static final FloatBlock DOF = new FloatBlock(10);
+	private static final Matrix4f DOF_INVERSE = new Matrix4f();
+	/** Depth of Field, half resolution: the prepared frame (later the filtered blur), the prefiltered frame, the gather. */
+	private static final GpuTexture[] DOF_HALF = new GpuTexture[3];
+	private static final GpuTextureView[] DOF_HALF_VIEWS = new GpuTextureView[3];
+	/** Foreground tiles: the largest near CoC per tile, then dilated. */
+	private static final GpuTexture[] DOF_TILES = new GpuTexture[2];
+	private static final GpuTextureView[] DOF_TILE_VIEWS = new GpuTextureView[2];
+	/** The autofocus, 1×1, ping-ponged with last frame's. */
+	private static final GpuTexture[] DOF_FOCUS = new GpuTexture[2];
+	private static final GpuTextureView[] DOF_FOCUS_VIEWS = new GpuTextureView[2];
+	/** Half-res texels per foreground tile (post_dof.fsh TILE reads 8×8). */
+	private static final int DOF_TILE = 8;
 	private static final Matrix4f INVERSE_VIEW_PROJECTION = new Matrix4f();
 	private static final Matrix4f VIEW_PROJECTION = new Matrix4f();
 	private static final Matrix4f RAYS_INVERSE = new Matrix4f();
@@ -148,6 +169,14 @@ public final class PostFx {
 	private static int aoWidth;
 	private static int aoHeight;
 	private static int aoIdleFrames;
+	private static @Nullable DynamicGpuDataStorageMapped<FloatBlock> dofRing;
+	private static int dofWidth;
+	private static int dofHeight;
+	private static int dofIdleFrames;
+	/** Which of {@link #DOF_FOCUS} holds last frame's focus, and whether it's worth easing from. */
+	private static int dofFocus;
+	private static boolean dofFocusValid;
+	private static long dofNanos = -1L;
 	/** This frame's level matrices and states ({@link #beginLevel}); null outside the level render. */
 	private static @Nullable Matrix4f frameProjection;
 	private static @Nullable CameraRenderState frameCamera;
@@ -173,6 +202,7 @@ public final class PostFx {
 	private static @Nullable SunRaysModule sunRays;
 	private static @Nullable MotionBlurModule motionBlur;
 	private static @Nullable AmbientOcclusionModule ambientOcclusion;
+	private static @Nullable DepthOfFieldModule depthOfField;
 	/** Last frame's camera, for Motion Blur's reprojection. */
 	private static boolean previousValid;
 	private static double previousX;
@@ -322,6 +352,13 @@ public final class PostFx {
 			drawRainbow();
 			if (!drawSunRays() && RAY_TEXTURES[0] != null && ++raysIdleFrames > IDLE_FRAMES) {
 				releaseRayTextures();
+			}
+			if (!drawDof()) {
+				// The next time it runs, focus snaps to what's in view instead of easing from a stale value.
+				dofFocusValid = false;
+				if (DOF_HALF[0] != null && ++dofIdleFrames > IDLE_FRAMES) {
+					releaseDofTextures();
+				}
 			}
 			drawMotionBlur();
 		} catch (RuntimeException e) {
@@ -544,6 +581,182 @@ public final class PostFx {
 			}
 		}
 		aoIdleFrames = 0;
+	}
+
+	// ---- Depth of Field ------------------------------------------------------------------------
+
+	/** Draws Depth of Field over the world; false when it's off or can't run. */
+	private static boolean drawDof() {
+		DepthOfFieldModule m = depthOfField;
+		if (m == null) {
+			m = depthOfField = ModuleManager.get(DepthOfFieldModule.class);
+		}
+		Matrix4f projection = frameProjection;
+		if (!m.isEnabled() || !ShaderSupport.dof() || ShaderPacks.inUse() || projection == null || frameCamera == null) {
+			return false;
+		}
+		RenderTarget target = Minecraft.getInstance().gameRenderer.mainRenderTarget();
+		GpuTexture color = target.getColorTexture();
+		GpuTextureView colorView = target.getColorTextureView();
+		GpuTextureView depth = target.getDepthTextureView();
+		CompiledRenderPipeline focusPass = compiled(LiquidPipelines.POST_DOF_FOCUS);
+		CompiledRenderPipeline prepare = compiled(LiquidPipelines.POST_DOF_PREPARE);
+		CompiledRenderPipeline tile = compiled(LiquidPipelines.POST_DOF_TILE);
+		CompiledRenderPipeline dilate = compiled(LiquidPipelines.POST_DOF_DILATE);
+		CompiledRenderPipeline prefilter = compiled(LiquidPipelines.POST_DOF_PREFILTER);
+		CompiledRenderPipeline gather = compiled(LiquidPipelines.POST_DOF_GATHER);
+		CompiledRenderPipeline filter = compiled(LiquidPipelines.POST_DOF_FILTER);
+		CompiledRenderPipeline composite = compiled(LiquidPipelines.POST_DOF_COMPOSITE);
+		if (color == null || colorView == null || depth == null || color.isClosed() || focusPass == null || prepare == null || tile == null
+				|| dilate == null || prefilter == null || gather == null || filter == null || composite == null) {
+			return false;
+		}
+		dofIdleFrames = 0;
+		int w = color.getWidth(0);
+		int h = color.getHeight(0);
+		int hw = Math.max(1, (w + 1) / 2);
+		int hh = Math.max(1, (h + 1) / 2);
+		ensureDofTextures(hw, hh);
+		ensureScene(color, w, h);
+		GpuBufferSlice slice = writeDof(m, projection, w, h, hw, hh);
+
+		CommandEncoder encoder = RenderSystem.getDevice().createCommandEncoder();
+		GpuSampler linear = RenderSystem.getSamplerCache().getClampToEdge(FilterMode.LINEAR);
+		GpuSampler nearest = RenderSystem.getSamplerCache().getClampToEdge(FilterMode.NEAREST);
+		int current = 1 - dofFocus;
+		GpuTextureView focus = DOF_FOCUS_VIEWS[current];
+		GpuTextureView prepared = DOF_HALF_VIEWS[0];
+		GpuTextureView prefiltered = DOF_HALF_VIEWS[1];
+		GpuTextureView gathered = DOF_HALF_VIEWS[2];
+		dofPass(encoder, DOF_FOCUS_LABEL, focusPass, slice, focus, DOF_FOCUS_VIEWS[dofFocus], nearest, depth, null, null, null, null);
+		dofPass(encoder, DOF_LABEL, prepare, slice, prepared, colorView, nearest, depth, focus, null, null, null);
+		dofPass(encoder, DOF_LABEL, tile, slice, DOF_TILE_VIEWS[0], prepared, nearest, null, null, null, null, null);
+		dofPass(encoder, DOF_LABEL, dilate, slice, DOF_TILE_VIEWS[1], DOF_TILE_VIEWS[0], nearest, null, null, null, null, null);
+		dofPass(encoder, DOF_LABEL, prefilter, slice, prefiltered, prepared, linear, null, null, null, null, null);
+		dofPass(encoder, DOF_LABEL, gather, slice, gathered, prefiltered, linear, null, null, null, null, DOF_TILE_VIEWS[1]);
+		// The prepared texture is free again: the filtered blur goes there (the CoC lives on in the prefiltered one).
+		dofPass(encoder, DOF_LABEL, filter, slice, prepared, gathered, linear, null, null, prefiltered, null, null);
+		encoder.copyTextureToTexture(color, scene, 0, 0, 0, 0, 0, w, h);
+		dofPass(encoder, DOF_COMPOSITE_LABEL, composite, slice, colorView, sceneView, linear, depth, focus, prefiltered, prepared, null);
+		dofFocus = current;
+		dofFocusValid = true;
+		return true;
+	}
+
+	private static GpuBufferSlice writeDof(DepthOfFieldModule m, Matrix4f projection, int w, int h, int hw, int hh) {
+		// Autofocus eases like a focus ring being turned (frame-rate independent); a fresh start snaps.
+		long now = System.nanoTime();
+		float dt = dofNanos < 0L ? 0f : Math.min(0.25f, (now - dofNanos) * 1.0e-9f);
+		dofNanos = now;
+		float ease = !dofFocusValid || dt <= 0f ? 1f : 1f - (float) Math.exp(-m.focusSpeed.get() * dt);
+
+		DOF_INVERSE.set(projection).invert();
+		DOF.mat4(0, DOF_INVERSE);
+		// A thin lens on a full-frame sensor (24 mm tall): the blur circle's radius is f² / (2 N · 24 mm)
+		// image heights per diopter. Zooming in (a narrower field of view than the setting) is a longer lens.
+		double fov = Math.toRadians(Minecraft.getInstance().options.fov().get());
+		float zoom = Math.clamp(Math.abs(projection.m11()) * (float) Math.tan(fov * 0.5), 0.5f, 10f);
+		float focal = m.focalLength.getFloat() * 0.001f * zoom;
+		float perDiopter = focal * focal / (2f * m.aperture.getFloat() * 0.024f) * hh;
+		float maxCoc = Math.min(48f, m.maxBlur.getFloat() / 100f * hh);
+		DOF.vec4(4, perDiopter, maxCoc, m.nearBlur.get() ? 1f : 0f, m.focusMode.index());
+		DOF.vec4(5, 1f / m.focusDistance.getFloat(), ease, m.tiltPosition.getFloat() / 100f, m.tiltWidth.getFloat() / 200f);
+		// Highlights: up to 31× brighter at full white (30 · s^1.5); fringing: ±12 % CoC per channel at most.
+		float highlights = m.highlights.getFloat() / 100f;
+		int taps = switch (m.quality.index()) {
+			case 0 -> 32;
+			case 2 -> 128;
+			default -> 64;
+		};
+		DOF.vec4(6, m.bokeh.index(), 30f * highlights * (float) Math.sqrt(highlights), m.fringing.getFloat() / 100f * 0.12f, taps);
+		DOF.vec4(7, w, h, hw, hh);
+		DOF.vec4(8, (hw + DOF_TILE - 1) / DOF_TILE, (hh + DOF_TILE - 1) / DOF_TILE, DOF_TILE, Math.min(6, (int) Math.ceil(maxCoc / DOF_TILE)));
+		DOF.vec4(9, w / (float) Math.max(1, h), 0.75f, m.focusAssist.index(), 0f);
+		DynamicGpuDataStorageMapped<FloatBlock> ring = dofRing;
+		if (ring == null) {
+			ring = dofRing = new DynamicGpuDataStorageMapped<>("Liquid depth of field UBO", DOF.size(), GpuBuffer.USAGE_UNIFORM, 1);
+		}
+		ring.endFrame();
+		return ring.writeData(DOF);
+	}
+
+	/**
+	 * One Depth of Field pass. {@code InSampler} is always bound; the others only when given (each
+	 * pipeline's layout names exactly the ones its pass gets). Depth, focus and tiles are read texel
+	 * by texel; the CoC between texels too.
+	 */
+	private static void dofPass(CommandEncoder encoder, Supplier<String> label, CompiledRenderPipeline pipeline, GpuBufferSlice params,
+			GpuTextureView destination, GpuTextureView in, GpuSampler inSampler, @Nullable GpuTextureView depth, @Nullable GpuTextureView focus,
+			@Nullable GpuTextureView coc, @Nullable GpuTextureView blur, @Nullable GpuTextureView tiles) {
+		GpuSampler nearest = RenderSystem.getSamplerCache().getClampToEdge(FilterMode.NEAREST);
+		try (RenderPass pass = encoder.createRenderPass(label, destination, Optional.empty())) {
+			pass.setPipeline(pipeline);
+			RenderSystem.bindDefaultUniforms(pass);
+			pass.setUniform("LiquidDof", params);
+			pass.setUniform("InSampler", in, inSampler);
+			if (depth != null) {
+				pass.setUniform("DepthSampler", depth, nearest);
+			}
+			if (focus != null) {
+				pass.setUniform("FocusSampler", focus, nearest);
+			}
+			if (coc != null) {
+				pass.setUniform("CocSampler", coc, RenderSystem.getSamplerCache().getClampToEdge(FilterMode.LINEAR));
+			}
+			if (blur != null) {
+				pass.setUniform("BlurSampler", blur, nearest);
+			}
+			if (tiles != null) {
+				pass.setUniform("TileSampler", tiles, nearest);
+			}
+			pass.draw(3, 1, 0, 0);
+		}
+	}
+
+	private static void ensureDofTextures(int hw, int hh) {
+		if (DOF_HALF[0] != null && !DOF_HALF[0].isClosed() && dofWidth == hw && dofHeight == hh) {
+			return;
+		}
+		releaseDofTextures();
+		GpuDevice device = RenderSystem.getDevice();
+		int usage = GpuTexture.USAGE_RENDER_ATTACHMENT | GpuTexture.USAGE_TEXTURE_BINDING;
+		for (int i = 0; i < DOF_HALF.length; i++) {
+			DOF_HALF[i] = device.createTexture(() -> "Liquid depth of field", usage, GpuFormat.RGBA16_FLOAT, hw, hh, 1, 1);
+			DOF_HALF_VIEWS[i] = device.createTextureView(DOF_HALF[i]);
+		}
+		int tw = (hw + DOF_TILE - 1) / DOF_TILE;
+		int th = (hh + DOF_TILE - 1) / DOF_TILE;
+		for (int i = 0; i < 2; i++) {
+			DOF_TILES[i] = device.createTexture(() -> "Liquid depth of field tiles", usage, GpuFormat.RGBA16_FLOAT, tw, th, 1, 1);
+			DOF_TILE_VIEWS[i] = device.createTextureView(DOF_TILES[i]);
+			DOF_FOCUS[i] = device.createTexture(() -> "Liquid depth of field focus", usage, GpuFormat.RGBA16_FLOAT, 1, 1, 1, 1);
+			DOF_FOCUS_VIEWS[i] = device.createTextureView(DOF_FOCUS[i]);
+		}
+		dofWidth = hw;
+		dofHeight = hh;
+		dofFocusValid = false;
+	}
+
+	private static void releaseDofTextures() {
+		closeAll(DOF_HALF, DOF_HALF_VIEWS);
+		closeAll(DOF_TILES, DOF_TILE_VIEWS);
+		closeAll(DOF_FOCUS, DOF_FOCUS_VIEWS);
+		dofIdleFrames = 0;
+		dofFocusValid = false;
+		dofNanos = -1L;
+	}
+
+	private static void closeAll(GpuTexture[] textures, GpuTextureView[] views) {
+		for (int i = 0; i < textures.length; i++) {
+			if (views[i] != null) {
+				views[i].close();
+				views[i] = null;
+			}
+			if (textures[i] != null) {
+				textures[i].close();
+				textures[i] = null;
+			}
+		}
 	}
 
 	// ---- Wet World -----------------------------------------------------------------------------
@@ -1182,6 +1395,7 @@ public final class PostFx {
 	// ---- Resources -----------------------------------------------------------------------------
 
 	private static void ensureScene(GpuTexture color, int w, int h) {
+		idleFrames = 0;
 		GpuTexture current = scene;
 		if (current != null && !current.isClosed() && current.getWidth(0) == w && current.getHeight(0) == h
 				&& current.getFormat() == color.getFormat()) {
@@ -1280,6 +1494,7 @@ public final class PostFx {
 		releaseTextures();
 		releaseRayTextures();
 		releaseAoTextures();
+		releaseDofTextures();
 		releaseOpaqueDepth();
 		hazeSlice = null;
 		if (hazeRing != null) {
@@ -1317,6 +1532,10 @@ public final class PostFx {
 		if (aoRing != null) {
 			aoRing.close();
 			aoRing = null;
+		}
+		if (dofRing != null) {
+			dofRing.close();
+			dofRing = null;
 		}
 		previousValid = false;
 	}

@@ -36,6 +36,7 @@ import net.client.visuals.module.render.WetWorldModule;
 import net.client.visuals.module.render.WetLensModule;
 import net.client.visuals.module.render.ChunkAnimationsModule;
 import net.client.visuals.module.render.ColorGradingModule;
+import net.client.visuals.module.render.DepthOfFieldModule;
 import net.client.visuals.module.render.CustomFogModule;
 import net.client.visuals.module.render.KillEffectsModule;
 import net.client.visuals.module.render.LightingModule;
@@ -102,6 +103,7 @@ public final class ModuleManager {
 		register(new HandChamsModule());
 		register(new MotionBlurModule());
 		register(new AmbientOcclusionModule());
+		register(new DepthOfFieldModule());
 		register(new ShowcaseModule());
 		register(new WavingPlantsModule());
 		register(new HudTheme());

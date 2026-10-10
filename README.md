@@ -174,6 +174,17 @@ shader wallpapers, a keybind-activated ClickGUI, a module system and the first v
   directions, then a depth-aware blur and upsample so edges stay crisp. Only the opaque world is
   shaded (water, glass, particles, weather and the hand are untouched), and it fades out with distance.
   Strength, radius, contrast, quality (half resolution, or full on Ultra) and a preview of the AO alone.
+* **Depth of Field** (Render) – the world through a real camera lens: what you look at stays sharp,
+  everything nearer or further melts into soft blur, and lamps, lava, stars and the sun bloom into
+  bokeh discs – circles, six-bladed hexagons, anamorphic ovals or vintage cat's eyes that turn into
+  lemons towards the frame's edges, with faint magenta / green fringes like real glass. A thin-lens
+  model in diopters (aperture f/1–f/16, focal length 18–200 mm, longer while zoomed), so focus pulls
+  feel even and close objects blur faster than far ones. Autofocus follows the crosshair, steadied by
+  the surface around it and eased like a focus ring; or a manual distance, or a tilt-shift miniature
+  band. Foreground blur spills softly over a sharp background and the rims of defocused objects turn
+  see-through, as with a real lens. Focus assist: peaking (sharp edges glow) or a blur map. Half
+  resolution scatter-as-gather in linear light, a CoC-aware composite at full resolution; after the
+  world and before the hand, so the hand and the HUD stay sharp.
 * **Hand Chams** (Render) – your first-person arm and held items, and in third person (F5, Showcase)
   the items you hold, drawn with a shader instead of their textures:
   Liquid Glass (first person: refracts the world behind your hand with colour dispersion; in the world:

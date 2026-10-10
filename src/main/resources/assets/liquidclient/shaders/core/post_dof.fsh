@@ -291,7 +291,9 @@ void main() {
     vec2 texel = 1.0 / Screen.zw;
     vec4 centre = texture(InSampler, texCoord);
     float cc = centre.a;
-    float radius = min(max(abs(cc), texture(TileSampler, texCoord).r), Lens.y);
+    // This texel's own tile (the tile texture is rounded up, so its uv doesn't line up with ours).
+    ivec2 tile = min(ivec2(texCoord * Screen.zw) / int(Tiles.z), ivec2(Tiles.xy) - 1);
+    float radius = min(max(abs(cc), texelFetch(TileSampler, tile, 0).r), Lens.y);
     if (radius < 0.5) {
         fragColor = vec4(0.0); // in focus, nothing in front: the sharp frame as it is
         return;
