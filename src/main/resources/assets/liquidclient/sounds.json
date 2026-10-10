@@ -56,5 +56,42 @@
 		"sounds": [
 			{ "name": "liquidclient:camera/focus", "volume": 0.32 }
 		]
+	},
+	"storm.thunder.crack": {
+		"subtitle": "subtitles.liquidclient.storm.crack",
+		"sounds": [
+			{ "name": "liquidclient:storm/thunder_crack1", "volume": 0.85, "attenuation_distance": 48 },
+			{ "name": "liquidclient:storm/thunder_crack2", "volume": 0.85, "attenuation_distance": 48 },
+			{ "name": "liquidclient:storm/thunder_crack3", "volume": 0.85, "attenuation_distance": 48 }
+		]
+	},
+	"storm.thunder.near": {
+		"subtitle": "subtitles.liquidclient.storm.thunder",
+		"sounds": [
+			{ "name": "liquidclient:storm/thunder_near1", "volume": 0.85, "attenuation_distance": 48 },
+			{ "name": "liquidclient:storm/thunder_near2", "volume": 0.85, "attenuation_distance": 48 },
+			{ "name": "liquidclient:storm/thunder_near3", "volume": 0.85, "attenuation_distance": 48 }
+		]
+	},
+	"storm.thunder.far": {
+		"subtitle": "subtitles.liquidclient.storm.thunder",
+		"sounds": [
+			{ "name": "liquidclient:storm/thunder_far1", "volume": 0.9, "attenuation_distance": 48 },
+			{ "name": "liquidclient:storm/thunder_far2", "volume": 0.9, "attenuation_distance": 48 },
+			{ "name": "liquidclient:storm/thunder_far3", "volume": 0.9, "attenuation_distance": 48 },
+			{ "name": "liquidclient:storm/thunder_far4", "volume": 0.9, "attenuation_distance": 48 }
+		]
+	},
+	"storm.rain": {
+		"subtitle": "subtitles.liquidclient.storm.rain",
+		"sounds": [
+			{ "name": "liquidclient:storm/rain_heavy", "volume": 0.55 }
+		]
+	},
+	"storm.wind": {
+		"subtitle": "subtitles.liquidclient.storm.wind",
+		"sounds": [
+			{ "name": "liquidclient:storm/wind", "volume": 0.5 }
+		]
 	}
 }
