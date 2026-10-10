@@ -184,6 +184,35 @@ shader wallpapers, a keybind-activated ClickGUI, a module system and the first v
   sun or moon glints off it all – then it dries over the drying time. Roofs, overhangs and caves
   stay dry: it uses Liquid Weather's per-column rain heights. Drawn over the opaque world before
   water, particles and weather.
+* **Storm Chaser** (Render) – call a thunderstorm and watch it roll in. A dark front builds on the
+  horizon over the build-up time, coming from the sun's side (backlit on the way in, sun-lit as it
+  leaves): towering cells with billowing tops under an anvil, a rolling shelf cloud with laminar tiers at its leading edge, grey rain
+  curtains hanging from it in the distance. Then the wind rises, the light dims and turns cold
+  (natural, eerie green or purple), the low, fast deck slides overhead and the rain comes in sweeping
+  sheets, slanted by the wind. At the peak, lightning: procedural branching bolts (midpoint
+  displacement with side branches and forks), a stepped leader feeling its way down, 2–4 return
+  strokes flickering over a fraction of a second, branches lit only by the first; strikes go for the
+  tallest thing around and land where a ray hits the terrain, with sparks at the foot. Cloud-to-cloud
+  flashes and spider lightning crawling along the cloud base light the cloud from inside. Each flash
+  lights the sky and the fog, and the world itself: every channel is a line light from the ground to
+  the cloud, relit in screen space from depth and reconstructed normals, while the cloud's glow falls
+  only on what's open to the sky (roofs and caves stay dark); Bloom catches it all. Thunder arrives
+  at the speed of sound (343 m/s): a sharp crack overhead, a rolling boom nearby, a low rumble far
+  off, each from the strike's direction. Afterwards mammatus pouches hang from the trailing deck lit
+  gold by a low sun, the rain stops, and the sky clears into sun rays and a rainbow (with Sun Rays
+  and Rainbows on). Thunder, heavy rain and the wind are synthesised (`tools/storm_sounds.py`:
+  thunder from the shock waves of every channel segment arriving over time and dulled by the air
+  with distance; a rain bed of thousands of drops; a gusting wind), on the Weather volume, muffled
+  under a roof. The storm drives Ambience's rain and thunder (even with Ambience off), draws its rain
+  with Liquid Weather, soaks Wet World faster, splashes Wet Lens and makes Waving Plants bend; Photo
+  Mode freezes it, bolt and all, and L calls a strike into the frame. When switched on (the keybind
+  calls / sends away a storm) / with server thunderstorms / always; intensity, build-up time, storm
+  length, lightning frequency and brightness, bolt style (natural, cinematic, forked, neon), flash
+  relighting, thunder volume, wind, tint, quality and render resolution (half or full). Client-side
+  only: nothing changes the game. Budgeted at about 1.5 ms on a GTX 1650 at 1080p at its peak, with the
+  sky and the relighting in half resolution (full resolution costs about four times as much for
+  those two); quality trims the sky's samples. If its shaders can't compile or an Iris shader pack is
+  on, the storm keeps its rain, sounds and darkened vanilla sky and strikes with vanilla bolts nearby.
 * **Ambient Occlusion** (Render) – soft contact shadows where light can't reach: in corners, where
   blocks meet, under leaves and overhangs, around mobs' feet. Horizon-based (HBAO) from the depth
   buffer: per pixel, the horizon the surrounding geometry raises above the surface in several rotated
@@ -287,7 +316,7 @@ net.client.visuals
 ├── LiquidConfig            interface preferences → config/liquidclient.json
 ├── module                  Module (icon, keybind), Category, ModuleManager (JSON persistence, keybinds), setting/*,
 │                           render/ (Skybox, ChunkAnimations, Ambience, CustomFog, Removals, ViewModel, KillEffects,
-│                           Particles, Atmosphere, Lighting, ColorGrading, Bloom, WavingPlants),
+│                           Particles, Atmosphere, Lighting, ColorGrading, Bloom, WavingPlants, StormChaser),
 │                           utility/ (Zoom, Browser)
 ├── hud                     HudManager, HudModule, HudStyle, HudTheme, element/* (incl. TargetHud, ModuleList, Notifications, Lyrics)
 ├── gui
@@ -325,6 +354,8 @@ net.client.visuals
 │   ├── particle/           AmbientParticles (spawner, shared settings), AmbientParticle, ParticleStyle,
 │   │                       ParticleShape, ParticleMotion
 │   ├── weather/            LiquidWeather (GPU rain, snow, splashes), WeatherColumns (surface / type / light per column)
+│   ├── storm/              Storm (Storm Chaser timeline), StormSky (storm clouds, fog, lightmap), Lightning (strikes,
+│   │                       flashes), BoltGenerator, StormRenderer (bolts, flash relighting), StormSounds (thunder, beds)
 │   └── shader/             LiquidPipelines, ShaderSupport, ShaderPacks (Iris check), BlurEngine
 └── mixin                   GuiMixin, GuiRenderStateMixin, GameRendererMixin, SkyRendererMixin, FogRendererMixin, CloudRendererMixin,
                             LoadingOverlayMixin, loading/ (Connect, GenericMessage, LevelLoading, Progress screens),
@@ -358,6 +389,7 @@ net.client.visuals
 | Zoom | `visual.CameraZoomMixin` (`Camera#calculateFov`), `visual.MouseHandlerZoomMixin` (`LocalPlayer#turn` in `turnPlayer`, `Options.smoothCamera`, `ScrollWheelHandler#onMouseScroll` in `onScroll`) | The hand keeps its own FOV; the hotbar doesn't scroll while zooming. |
 | Particles | `AmbientParticles.tick` (`END_CLIENT_TICK`) adds `AmbientParticle`s to `Minecraft.particleEngine`; each overrides `SingleQuadParticle#extract` and submits to custom `SingleQuadParticle.Layer`s (`LiquidPipelines.PARTICLE_GLOW` / `PARTICLE_SOFT` + their OIT sets) | No mixin and no particle type: vanilla ticks, culls and draws them, and the quad renderer binds each layer's own pipeline. The live count is taken from the particles' own ticks, so engine clears (world change, reload) never desync it. |
 | Atmosphere | `GameRendererMixin` (projection before `LevelRenderer#render`, second pass before `render3dHud`), `LevelRendererMixin` (`@ModifyVariable` on the render pass at `executeTranslucentAfterTerrain` in `executeClassicTransparency`, closed at `RETURN`; `executeOit` HEAD) | Vanilla draws water, then particles, clouds and weather in one render pass. That pass is closed (idempotent), the world hazed from a depth copy, and reopened, so particles – no depth writes – aren't fogged like the terrain behind them. A second pass hazes only what came nearer since. Falls back to one pass after the world. |
+| Storm Chaser | No mixins of its own. `GameRendererMixin` (`PostFx.beginLevel`: storm clock, lightning, thunder; `PostFx.afterLevel`: flash relighting, then the bolts), `SkyRendererMixin` (storm clouds over any sky mode), `FogRendererMixin` (colour + distance), `visual.LightmapMixin` (cold, dim light; flashes), `visual.LevelWeatherMixin` (via Ambience: rain / thunder levels), `visual.ClientLevelWeatherMixin` (rain where the biome has none), `CloudRendererMixin` (vanilla clouds hidden under the deck) | The existing hooks already sit where the storm needs to act; the storm only adds to their bodies. Bolts draw with depth test against the finished world, before the hand, so Bloom and grading see them. |
 | Bloom / Color Grading | `GameRendererMixin` → before `applyPostEffects` in `render` | After the hand and entity outlines, before vanilla's post effects and the GUI: one frame copy, the bloom chain, one grade / composite pass. |
 | Lighting | `visual.LightmapMixin` → `LightmapRenderStateExtractor#extract` TAIL, before Ambience fullbright | Sky light colour / factor, block-light tint / factor and ambient colour are all in the render state, once per tick. |
 | Waving Plants | `sodium.SodiumBlockRendererMixin` (`@Pseudo`: classify the block at `renderModel` HEAD, `@ModifyExpressionValue` on `Material#bits()` in `bufferQuad`), `ShaderManagerMixin` (`loadInclude`: Sodium's `chunk_vertex.glsl`), the Sodium terrain patch | The sway mode rides in two unused bits of the per-quad material byte; the wind shares Sodium's `u_FadePeriodInv` with Chunk Animations as raw bits (sign + bit 30 set, bit 29 clear: always a normal float). The wave code only compiles once the include is confirmed. Waves are whole periods per 128-block Sodium region, so they're world-anchored without a camera position. |
