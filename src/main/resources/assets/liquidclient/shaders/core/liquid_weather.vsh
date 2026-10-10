@@ -128,6 +128,21 @@ void rain(int layer, vec3 seed, float w, vec2 corner) {
         cull();
         return;
     }
+    // A storm's rain sweeps through in sheets: bands of heavier rain drifting downwind, anchored in
+    // the world (two wavelengths that both divide 4096, the wrap of the position and of the phase).
+    if (Motion.w > 0.0) {
+        vec2 wind = Motion.xz / max(length(Motion.xz), 1.0e-3);
+        vec2 wp = mod(CameraBlock.xz, 4096.0) + CameraFrac.xz + head.xz;
+        float along = dot(wp, wind) - Extra.w;
+        float across = dot(wp, vec2(-wind.y, wind.x));
+        float band = 0.5 + 0.5 * sin(along * (6.2831853 / 64.0) + sin(across * 0.021) * 1.7);
+        float fine = 0.5 + 0.5 * sin(along * (6.2831853 / 25.6) + 1.3 + sin(across * 0.05) * 1.1);
+        float keep = mix(1.0, smoothstep(0.12, 0.8, band * 0.7 + fine * 0.3), Motion.w);
+        if (fract(w * 13.71 + seed.x * 7.31) > keep) {
+            cull();
+            return;
+        }
+    }
     head.y = max(head.y, c.surface);
 
     vec3 axis = tail - head;

@@ -11,11 +11,11 @@ layout(std140) uniform LiquidWeather {
     //   [2i]     xyz animation offset (fall and wind travel), w horizontal period
     //   [2i + 1] xyz camera position modulo the periods,       w vertical period
     vec4 Layers[10];
-    // x / z rain wind (m/s), y rain fall speed (m/s), w unused
+    // x / z rain wind (m/s), y rain fall speed (m/s), w a storm's rain sheets 0..1
     vec4 Motion;
     // x rain opacity, y snow opacity, z snowflake size, w splash opacity
     vec4 Look;
-    // x streak exposure (s), y wind strength 0..1, z thunder 0..1, w unused
+    // x streak exposure (s), y wind strength 0..1.6, z thunder 0..1, w where the sheets are along the wind (blocks)
     vec4 Extra;
 };
 

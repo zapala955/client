@@ -3,6 +3,7 @@ package net.client.visuals.render.post;
 import net.client.visuals.module.ModuleManager;
 import net.client.visuals.module.render.WetLensModule;
 import net.client.visuals.render.anim.Smooth;
+import net.client.visuals.render.storm.Storm;
 import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
@@ -19,8 +20,8 @@ import org.jspecify.annotations.Nullable;
  *
  * <ul>
  *   <li><b>Rain</b> – under open sky where it rains (the client's precipitation, so Ambience's
- *       override applies), the lens gets wetter, faster when looking up; out of the rain it dries
- *       over ~10 s.</li>
+ *       override applies), the lens gets wetter, faster when looking up (a storm's wind drives the
+ *       rain into it wherever you look); out of the rain it dries over ~10 s.</li>
  *   <li><b>Drench</b> – the moment the camera comes out of water the lens is streaming; the sheet
  *       drains from the top over ~3.5 s.</li>
  *   <li><b>Frost</b> – where it snows the lens frosts from the edges over ~15 s and thaws slowly.</li>
@@ -82,6 +83,8 @@ public final class WetLens {
 		// Looking up catches more rain than looking at the horizon (xRot -90 = straight up).
 		float up = Math.clamp(-camera.xRot() / 90f, 0f, 1f);
 		wetTarget = m.raindrops.get() && falling == Biome.Precipitation.RAIN ? rain * (0.55f + 0.45f * up) : 0f;
+		// A storm's wind drives the rain into the lens wherever you look.
+		wetTarget = Math.min(1f, wetTarget * (1f + 0.6f * Math.min(1f, Storm.wind())));
 		if (m.alwaysWet.get() && m.raindrops.get()) {
 			wetTarget = 1f;
 		}

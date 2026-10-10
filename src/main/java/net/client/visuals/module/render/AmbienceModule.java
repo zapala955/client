@@ -6,6 +6,7 @@ import net.client.visuals.module.setting.BooleanSetting;
 import net.client.visuals.module.setting.ModeSetting;
 import net.client.visuals.module.setting.NumberSetting;
 import net.client.visuals.render.camera.PhotoMode;
+import net.client.visuals.render.storm.Storm;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.world.level.Level;
@@ -28,6 +29,9 @@ import java.util.Locale;
  *       rain / snow stopping on roofs, trees and water. Precipitation can follow the biome or be
  *       forced to rain or snow ({@code ClientLevelWeatherMixin}).</li>
  *   <li><b>Fullbright</b> – night-vision lighting in the lightmap ({@code LightmapMixin}).</li>
+ *   <li><b>Storm Chaser</b> – a storm raises the rain and thunder levels to its own where you are
+ *       ({@code render.storm.Storm}), rains where the biome wouldn't, and draws its rain with Liquid
+ *       Weather (when that's on) even while Ambience itself is off.</li>
  * </ul>
  * Nothing is sent to the server; gameplay is unaffected.
  */
@@ -138,9 +142,9 @@ public final class AmbienceModule extends Module {
 			if (m != null) {
 				m.serverRain = original;
 			}
-			return original;
+			return Storm.rainLevel(original);
 		}
-		return m.rain;
+		return Storm.rainLevel(m.rain);
 	}
 
 	public static float thunderLevel(float original) {
@@ -148,20 +152,25 @@ public final class AmbienceModule extends Module {
 		if (photo >= 0f) {
 			return photo;
 		}
+		// Storm Chaser follows the server's thunderstorms when asked to.
+		Storm.serverThunder(original);
 		AmbienceModule m = instance;
 		if (m == null || !m.isEnabled() || !m.overriding) {
 			if (m != null) {
 				m.serverThunder = original;
 			}
-			return original;
+			return Storm.thunderLevel(original);
 		}
-		return m.thunder * m.rain;
+		return Storm.thunderLevel(m.thunder * m.rain);
 	}
 
-	/** The module when Liquid Weather should replace vanilla's rain and snow, else null. */
+	/**
+	 * The module when Liquid Weather should replace vanilla's rain and snow, else null. A storm (Storm
+	 * Chaser) draws its rain with it too, with these settings, even while Ambience is off.
+	 */
 	public static @Nullable AmbienceModule liquidWeather() {
 		AmbienceModule m = instance;
-		return m != null && m.isEnabled() && m.liquidWeather.get() ? m : null;
+		return m != null && (m.isEnabled() || Storm.active()) && m.liquidWeather.get() ? m : null;
 	}
 
 	/** What falls everywhere instead of what the biome says, or null to follow the biome. */

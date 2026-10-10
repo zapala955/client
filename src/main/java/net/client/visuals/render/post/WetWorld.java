@@ -2,6 +2,7 @@ package net.client.visuals.render.post;
 
 import net.client.visuals.module.ModuleManager;
 import net.client.visuals.module.render.WetWorldModule;
+import net.client.visuals.render.storm.Storm;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import org.jspecify.annotations.Nullable;
@@ -11,8 +12,9 @@ import org.jspecify.annotations.Nullable;
  *
  * <p>While it rains (the client's rain level, so Ambience's weather counts), surfaces get wet within
  * ~25 s and puddles fill over ~70 s, faster in heavy rain. When it stops, both dry over the module's
- * drying time (puddles a little slower). Where it rains or snows, and what's under cover, is per
- * block column in the shader.</p>
+ * drying time (puddles a little slower). A storm's downpour (Storm Chaser) soaks everything and fills
+ * the puddles up to twice as fast. Where it rains or snows, and what's under cover, is per block
+ * column in the shader.</p>
  */
 public final class WetWorld {
 	private static final float TICK = 0.05f;
@@ -50,8 +52,9 @@ public final class WetWorld {
 			return;
 		}
 		if (rain > 0.2f) {
-			wet = Math.min(1f, wet + TICK / 25f * (0.5f + rain));
-			puddles = Math.min(1f, puddles + TICK / 70f * rain * rain * 1.5f);
+			float downpour = 1f + Storm.rain();
+			wet = Math.min(1f, wet + TICK / 25f * (0.5f + rain) * downpour);
+			puddles = Math.min(1f, puddles + TICK / 70f * rain * rain * 1.5f * downpour);
 		} else {
 			float drying = m.dryingTime.getFloat();
 			wet = Math.max(0f, wet - TICK / drying);

@@ -4,6 +4,7 @@ import com.llamalad7.mixinextras.injector.ModifyReturnValue;
 import com.llamalad7.mixinextras.injector.v2.WrapWithCondition;
 import com.llamalad7.mixinextras.sugar.Local;
 import net.client.visuals.module.render.AmbienceModule;
+import net.client.visuals.render.storm.Storm;
 import net.client.visuals.render.weather.LiquidWeather;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.BlockPos;
@@ -19,7 +20,8 @@ import org.spongepowered.asm.mixin.injection.At;
  * <ul>
  *   <li>{@code getPrecipitationAt} – only weather visuals and weather sounds ask it (vanilla's and
  *       Liquid Weather's), so "Always Rain" / "Always Snow" change what falls (and its sound)
- *       everywhere, deserts included, without touching gameplay.</li>
+ *       everywhere, deserts included, without touching gameplay. A storm (Storm Chaser) fills in
+ *       rain where the biome has none.</li>
  *   <li>{@code tickWeatherEffects} – vanilla's rain splash particles are skipped while Liquid
  *       Weather draws its own splashes (smoke on lava and campfires stays).</li>
  * </ul>
@@ -30,7 +32,11 @@ public abstract class ClientLevelWeatherMixin {
 	private Biome.Precipitation liquid$precipitation(Biome.Precipitation original, @Local(argsOnly = true) BlockPos pos) {
 		Biome.Precipitation forced = AmbienceModule.forcedPrecipitation();
 		if (forced == null) {
-			return original;
+			// A storm (Storm Chaser) rains where the biome wouldn't; snow stays snow.
+			if (original != Biome.Precipitation.NONE || !Storm.rainsEverywhere()) {
+				return original;
+			}
+			forced = Biome.Precipitation.RAIN;
 		}
 		ClientLevel level = (ClientLevel) (Object) this;
 		return level.hasChunk(SectionPos.blockToSectionCoord(pos.getX()), SectionPos.blockToSectionCoord(pos.getZ())) ? forced : original;

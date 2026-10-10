@@ -4,6 +4,7 @@ import net.client.visuals.module.ModuleManager;
 import net.client.visuals.module.render.ParticlesModule;
 import net.client.visuals.module.render.WavingPlantsModule;
 import net.client.visuals.render.shader.ShaderPacks;
+import net.client.visuals.render.storm.Storm;
 import net.minecraft.client.Minecraft;
 import net.minecraft.world.level.block.AttachedStemBlock;
 import net.minecraft.world.level.block.AzaleaBlock;
@@ -104,7 +105,8 @@ public final class FoliageWaving {
 	/**
 	 * The wind for Sodium's packed terrain uniform: level (1–7) | direction (0–7, 45° steps clockwise
 	 * from north) {@code << 3} | gusts {@code << 6}; 0 when the module is off or a shader pack draws
-	 * the terrain. Render thread, once per frame.
+	 * the terrain. A storm raises the level with its gusts and turns the wind along its travel.
+	 * Render thread, once per frame.
 	 */
 	public static int sodiumBits() {
 		WavingPlantsModule m = module;
@@ -123,6 +125,19 @@ public final class FoliageWaving {
 		} else {
 			compass = direction - 1;
 		}
-		return (m.wind.index() + 1) | compass << 3 | (m.gusts.get() ? 1 : 0) << 6;
+		int level = m.wind.index() + 1;
+		boolean gusts = m.gusts.get();
+		// A storm (Storm Chaser) blows harder, along its travel, in gusts.
+		float storm = Storm.wind();
+		if (storm > 0.05f) {
+			level = Math.max(level, Math.clamp(Math.round(1f + storm * 4.2f), 1, 7));
+			if (storm > 0.2f) {
+				// Clockwise from north (-z), like the compass setting.
+				double bearing = Math.toDegrees(Math.atan2(Storm.axisX(), -Storm.axisZ()));
+				compass = Math.floorMod((int) Math.round(bearing / 45.0), 8);
+				gusts = true;
+			}
+		}
+		return level | compass << 3 | (gusts ? 1 : 0) << 6;
 	}
 }

@@ -16,6 +16,7 @@ import net.client.visuals.render.post.WetWorld;
 import net.client.visuals.render.shader.LiquidPipelines;
 import net.client.visuals.render.shader.ShaderPacks;
 import net.client.visuals.render.shader.ShaderSupport;
+import net.client.visuals.render.storm.Storm;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.DynamicGpuData;
@@ -49,6 +50,11 @@ import java.util.function.Supplier;
  * so the air right around you is full while the distance stays affordable; splashes appear around
  * you on the ground. Drop positions use the R3 low-discrepancy sequence: evenly spread with no clumps
  * or holes, and any prefix is evenly spread too, so the density setting just draws fewer of them.
+ *
+ * <h2>Storms</h2>
+ * A storm (Storm Chaser) takes over the wind – its direction along the storm's travel, its strength
+ * with the gusts, so the rain slants hard – thickens the rain, and sweeps it through in sheets:
+ * bands of heavier rain drifting downwind, anchored in the world ({@code liquid_weather.vsh}).
  *
  * <h2>Hooks</h2>
  * {@code WeatherEffectRendererMixin}: {@link #extract} replaces vanilla's column extraction (its
@@ -113,6 +119,8 @@ public final class LiquidWeather {
 	private static float rainWindX;
 	private static float rainWindZ;
 	private static float windStrength;
+	/** Where the storm's rain sheets are along the wind (blocks, wrapped at 4096: whole periods of both bands). */
+	private static double sheetPhase;
 
 	private LiquidWeather() {
 	}
@@ -172,6 +180,14 @@ public final class LiquidWeather {
 		windStrength = Math.min(1f, settings.wind.getFloat() / 100f * (1f + 0.6f * thunderLevel));
 		float angle = 0.6f + 0.8f * Mth.sin(t * 0.013f) + 0.4f * Mth.sin(t * 0.031f + 1.3f);
 		float gust = 0.75f + 0.25f * Mth.sin(t * 0.41f) * Mth.sin(t * 0.17f + 0.7f) + thunderLevel * 0.15f * Mth.sin(t * 1.3f);
+		// A storm's wind blows along its travel, as hard as its gusts (up to 1.6: rain slanting ~40°).
+		float presence = Storm.presence();
+		if (presence > 0f) {
+			windStrength = Math.max(windStrength, Math.min(1.6f, Storm.wind()));
+			angle += Mth.wrapDegrees((Storm.windAngle() - angle) * Mth.RAD_TO_DEG) * Mth.DEG_TO_RAD * presence;
+			gust = Mth.lerp(presence, gust, 1f);
+		}
+		sheetPhase = floorMod(sheetPhase + dt * (5.0 + 9.0 * windStrength), 4096.0);
 		float dirX = Mth.cos(angle);
 		float dirZ = Mth.sin(angle);
 		float rainWind = windStrength * gust * 4.5f;
@@ -198,7 +214,7 @@ public final class LiquidWeather {
 	}
 
 	private static void counts(AmbienceModule settings, float rain) {
-		float storm = 1f + 0.25f * thunderLevel;
+		float storm = 1f + 0.25f * thunderLevel + 0.7f * Storm.rain() * Math.min(1.5f, Storm.module().intensity.getFloat() / 100f);
 		float rainShare = settings.rainDensity.getFloat() / 200f * rain * storm;
 		float snowShare = settings.snowDensity.getFloat() / 200f * rain;
 		boolean anyRain = COLUMNS.anyRain();
@@ -252,10 +268,10 @@ public final class LiquidWeather {
 			DATA.vec4(2 + layer * 2, (float) ANIM[o], (float) ANIM[o + 1], (float) ANIM[o + 2], h);
 			DATA.vec4(3 + layer * 2, (float) floorMod(camera.x, h), (float) floorMod(camera.y, v), (float) floorMod(camera.z, h), v);
 		}
-		DATA.vec4(12, rainWindX, RAIN_SPEED * (1f + 0.12f * thunderLevel), rainWindZ, 0f);
+		DATA.vec4(12, rainWindX, RAIN_SPEED * (1f + 0.12f * thunderLevel), rainWindZ, Storm.sheets());
 		float size = settings != null ? settings.flakeSize.getFloat() / 100f : 1f;
 		DATA.vec4(13, 0.3f * (0.75f + 0.25f * rainLevel), 0.9f, size, 0.6f);
-		DATA.vec4(14, EXPOSURE, windStrength, thunderLevel, 0f);
+		DATA.vec4(14, EXPOSURE, windStrength, thunderLevel, (float) sheetPhase);
 	}
 
 	/** Inside vanilla's weather slot: the translucent pass, or one OIT stage. */

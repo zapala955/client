@@ -8,6 +8,7 @@ import net.client.visuals.module.player.PhotoModeModule;
 import net.client.visuals.module.player.ShowcaseModule;
 import net.client.visuals.render.UiSounds;
 import net.client.visuals.render.post.PhotoCapture;
+import net.client.visuals.render.storm.Lightning;
 import net.minecraft.client.CameraType;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.Options;
@@ -40,7 +41,8 @@ import org.jspecify.annotations.Nullable;
  * The lens drives the field of view and Depth of Field (focus at the centre, a point you click, or a
  * manual distance), exposure and filters drive Color Grading, the time and weather override Ambience,
  * and {@link PhotoCapture} takes the photo: frames averaged with sub-pixel jitter once the camera has
- * settled. The viewfinder ({@code gui.photo.PhotoOverlay}) and the studio ({@link PhotoStudioScreen})
+ * settled. In a storm (Storm Chaser), L calls a lightning strike into the frame; frozen, the storm
+ * stands still with it, mid-strike. The viewfinder ({@code gui.photo.PhotoOverlay}) and the studio ({@link PhotoStudioScreen})
  * read their state from here. Frame-rate independent throughout; nothing here allocates per frame
  * except the collision rays while the camera moves.
  */
@@ -666,6 +668,12 @@ public final class PhotoMode {
 				if (press && canFreeze()) {
 					m.freeze.set(!m.freeze.get());
 					UiSounds.toggle(m.freeze.get());
+				}
+			}
+			case InputConstants.KEY_L -> {
+				// Storm Chaser: a lightning strike out where you're looking – held mid-strike while frozen.
+				if (press && Lightning.strikeInView(x, y, z, yaw, pitch)) {
+					UiSounds.click();
 				}
 			}
 			case InputConstants.KEY_LBRACKET -> stepAperture(-1);
