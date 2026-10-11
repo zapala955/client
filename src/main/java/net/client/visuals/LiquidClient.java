@@ -209,6 +209,7 @@ public final class LiquidClient implements ClientModInitializer {
 			PhotoMode.tick(minecraft);
 			ModuleManager.clientTick(minecraft);
 			MediaBridge.tick();
+			FreezeWatchdog.tick();
 		});
 
 		// Kill Effects and the Target HUD follow what the local player hits. The callback runs on

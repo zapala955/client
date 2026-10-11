@@ -248,7 +248,10 @@ public final class WorldIntro {
 
 	public static int apply(@Nullable Entity entity, @Nullable Level level, float partialTicks) {
 		long now = System.nanoTime();
-		float dt = lastNanos < 0L ? 0f : Math.min(0.1f, (now - lastNanos) * 1.0e-9f);
+		// The waits run on real time, so a slow frame rate can't stretch the black; the flight on
+		// frame time with a cap, so a hitch doesn't jump the shot ahead.
+		float elapsed = lastNanos < 0L ? 0f : Math.min(5f, (now - lastNanos) * 1.0e-9f);
+		float dt = Math.min(0.25f, elapsed);
 		lastNanos = now;
 		Minecraft minecraft = Minecraft.getInstance();
 		if (state == IDLE || entity == null || level == null || entity != minecraft.player || !(level instanceof ClientLevel client)) {
@@ -266,7 +269,7 @@ public final class WorldIntro {
 		}
 		if (state == LOADING) {
 			// ...then, behind black, for the land under the shot to load – as far as the server lets us see.
-			waited += dt;
+			waited += elapsed;
 			if (waited > MAX_WAIT) {
 				end(minecraft);
 				return VANILLA;
@@ -278,7 +281,7 @@ public final class WorldIntro {
 			begin(minecraft, client, entity, eye, eyeYaw);
 		}
 		if (state == PARKED) {
-			parked += dt;
+			parked += elapsed;
 			// Parked at the start behind black: the renderer builds what the shot will see first.
 			if (parked >= SETTLE || waited + parked > MAX_WAIT) {
 				state = PLAYING;
