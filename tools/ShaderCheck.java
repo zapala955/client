@@ -30,8 +30,9 @@ import static org.lwjgl.util.shaderc.Shaderc.*;
  * <p>The terrain shaders are checked with our source patches applied ({@code TerrainShaderPatch}:
  * Chunk Animations, Waving Plants; {@code WaterShaderPatch}: Liquid Water) in every pass they're
  * used for – solid, cutout, translucent with and without the water tag, the OIT stages – vanilla's
- * always, Sodium's when its shaders are given. That needs the two patch classes on the class path
- * (they have no Minecraft types): compile them first, e.g.</p>
+ * always, Sodium's when its shaders are given – Sodium's also with another mod's varyings added on
+ * top (as Sodium Extra does), which ours must not collide with. That needs the two patch classes on
+ * the class path (they have no Minecraft types): compile them first, e.g.</p>
  * <pre>
  * javac -cp jspecify.jar -d /tmp/patches src/main/java/net/client/visuals/render/chunk/TerrainShaderPatch.java \
  *       src/main/java/net/client/visuals/render/water/WaterShaderPatch.java
@@ -182,14 +183,27 @@ public final class ShaderCheck {
 				PATCHED.put("sodium:include/chunk_vertex.glsl", i);
 				PATCHED.put("sodium:blocks/block_layer_opaque.vsh", v);
 				PATCHED.put("sodium:blocks/block_layer_opaque.fsh", f);
+				// The same, with another mod's varyings added after ours (served under a namespace of its own).
+				String fv = foreignVertex(v);
+				String ff = foreignFragment(f);
+				if (fv == null || ff == null) {
+					System.out.println("FAIL  Sodium terrain: the simulated third-party patch no longer applies");
+					failures++;
+				} else {
+					PATCHED.put("sodium_foreign:blocks/block_layer_opaque.vsh", fv);
+					PATCHED.put("sodium_foreign:blocks/block_layer_opaque.fsh", ff);
+				}
 				List<String[]> sodiumPasses = List.of(new String[0], new String[]{"ALPHA_CUTOUT=0.5"}, new String[]{"ALPHA_CUTOUT=0.01", "LIQUID_WATER"});
-				for (String[] pass : sodiumPasses) {
-					for (String[] stage : oit) {
-						// VULKAN is predefined when compiling for Vulkan (Sodium's push constants depend on it).
-						List<String> defines = new ArrayList<>(List.of("USE_VERTEX_COMPRESSION", "USE_FOG"));
-						defines.addAll(List.of(pass));
-						defines.addAll(List.of(stage));
-						out.add(new Variant("Sodium terrain " + defines, "sodium:blocks/block_layer_opaque", "sodium:blocks/block_layer_opaque", defines));
+				for (String shader : new String[]{"sodium:blocks/block_layer_opaque", "sodium_foreign:blocks/block_layer_opaque"}) {
+					for (String[] pass : sodiumPasses) {
+						for (String[] stage : oit) {
+							// VULKAN is predefined when compiling for Vulkan (Sodium's push constants depend on it).
+							List<String> defines = new ArrayList<>(List.of("USE_VERTEX_COMPRESSION", "USE_FOG"));
+							defines.addAll(List.of(pass));
+							defines.addAll(List.of(stage));
+							String name = shader.startsWith("sodium_foreign") ? "Sodium terrain + third-party varyings " : "Sodium terrain ";
+							out.add(new Variant(name + defines, shader, shader, defines));
+						}
 					}
 				}
 			}
@@ -268,6 +282,29 @@ public final class ShaderCheck {
 			out.add(new Variant(name, vertex, fragment, defines));
 		}
 		return out;
+	}
+
+	/**
+	 * Another mod patching Sodium's terrain shader after us, the way Sodium Extra does for its fog
+	 * shapes: two more varyings at the next free locations (4 and 5), declared right after
+	 * {@code v_TexCoord} in both stages and written in the vertex stage. Ours must not collide with them.
+	 */
+	static String foreignVertex(String s) {
+		String anchor = "layout(location = 1) out vec2 v_TexCoord;";
+		String init = "    _vert_init();";
+		if (!s.contains(anchor) || !s.contains(init)) {
+			return null;
+		}
+		return s.replace(anchor, anchor + "\nlayout(location = 4) out float foreign_A;\nlayout(location = 5) out vec2 foreign_B;")
+				.replace(init, init + "\n    foreign_A = 0.0;\n    foreign_B = vec2(0.0);");
+	}
+
+	static String foreignFragment(String s) {
+		String anchor = "layout(location = 1) in vec2 v_TexCoord;";
+		if (!s.contains(anchor)) {
+			return null;
+		}
+		return s.replace(anchor, anchor + "\nlayout(location = 4) in float foreign_A;\nlayout(location = 5) in vec2 foreign_B;");
 	}
 
 	/** Compiles one stage; null on success, else the compiler's message. */

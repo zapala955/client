@@ -23,11 +23,25 @@ import org.jspecify.annotations.Nullable;
  * tinted translucent block – a vertex colour with real chroma (glass and ice are grey) – in sections
  * whose visibility arrives raised by 2 (the per-frame on switch, {@link WaterTag#vanillaVisibility}).
  *
- * <p>Each patch matches exact anchor lines and returns null if one is missing (the shader stays
- * stock, and so does the water). No Minecraft types, so the output can be compiled offline
- * ({@code tools/ShaderCheck.java}).</p>
+ * <p>The two varyings this adds ({@code liquid_Water}, {@code liquid_Sky}) only exist in that
+ * translucent pipeline ({@code #ifdef LIQUID_WATER} in both stages), so every other terrain pipeline
+ * compiles exactly as before. They sit at fixed, deliberately high locations ({@link #WATER_LOCATION},
+ * {@link #SKY_LOCATION}) because other mods patch the same shaders after us and take the next free
+ * ones: Sodium Extra adds its fog-shape varyings at 4 and 5 to Sodium's terrain shader – the same
+ * locations as ours once were, which broke compiling it. 12 and 13 stay below every backend's minimum
+ * (Vulkan guarantees locations 0–15, OpenGL 3.3 0–14).</p>
+ *
+ * <p>Each patch matches exact anchor lines and returns null if one is missing, or if something
+ * already uses our locations (the shader stays stock, and so does the water). No Minecraft types,
+ * so the output can be compiled offline ({@code tools/ShaderCheck.java}).</p>
  */
 public final class WaterShaderPatch {
+	/** Varying locations: high, so the free low ones stay for other mods (see the class comment). */
+	public static final int WATER_LOCATION = 12;
+	public static final int SKY_LOCATION = 13;
+	private static final java.util.regex.Pattern OUR_LOCATIONS =
+			java.util.regex.Pattern.compile("location\\s*=\\s*(" + WATER_LOCATION + "|" + SKY_LOCATION + ")\\b");
+
 	private static final String MAIN = "void main() {";
 	private static final String FINAL_COLOR = "    fragColor = calculateFinalColor(color);";
 
@@ -35,29 +49,33 @@ public final class WaterShaderPatch {
 
 	private static final String SODIUM_OUTPUTS_ANCHOR = "uniform isamplerBuffer u_SectionTimeInfo;";
 	private static final String SODIUM_OUTPUTS = """
+			#ifdef LIQUID_WATER
 			// Liquid Water: whether this quad is water (material bit 5) and the sky light, for the fragment stage.
-			layout(location = 4) flat out uint liquid_Water;
-			layout(location = 5) out float liquid_Sky;
+			layout(location = %d) flat out uint liquid_Water;
+			layout(location = %d) out float liquid_Sky;
+			#endif
 
-			""";
+			""".formatted(WATER_LOCATION, SKY_LOCATION);
 	private static final String SODIUM_INIT = "    _vert_init();";
 	private static final String SODIUM_VERTEX = """
 			    _vert_init();
+			#ifdef LIQUID_WATER
 			#ifdef LIQUID_SODIUM_MATERIAL
 			    liquid_Water = (_material_params >> 5u) & 1u;
 			#else
 			    liquid_Water = 0u;
 			#endif
-			    liquid_Sky = _vert_tex_light_coord.y;""";
+			    liquid_Sky = _vert_tex_light_coord.y;
+			#endif""";
 	private static final String SODIUM_INPUTS_ANCHOR = "layout(location = 3) in float fadeFactor;";
 	private static final String SODIUM_INPUTS = """
 
 			#if defined(LIQUID_WATER) && !defined(OIT_ALPHA_ONLY) && !defined(OIT_ACCUMULATE)
 			#define LIQUID_WATER_TAG 1
-			layout(location = 4) flat in uint liquid_Water;
-			layout(location = 5) in float liquid_Sky;
+			layout(location = %d) flat in uint liquid_Water;
+			layout(location = %d) in float liquid_Sky;
 			layout(depth_less) out float gl_FragDepth;
-			#endif""";
+			#endif""".formatted(WATER_LOCATION, SKY_LOCATION);
 	/** Sodium's light coordinate is (level · 16 + 8) / 256. */
 	private static final String SODIUM_SKY = "uint(clamp(floor((liquid_Sky * 256.0 - 8.0) / 16.0 + 0.5), 0.0, 15.0))";
 
@@ -66,13 +84,16 @@ public final class WaterShaderPatch {
 	private static final String VANILLA_OUTPUTS_ANCHOR = "layout(location = 4) out float chunkVisibility;";
 	private static final String VANILLA_OUTPUTS = """
 
+			#ifdef LIQUID_WATER
 			// Liquid Water: whether this is water (a tinted vertex in a tagged section) and the sky light.
-			layout(location = 5) flat out uint liquid_Water;
-			layout(location = 6) out float liquid_Sky;""";
+			layout(location = %d) flat out uint liquid_Water;
+			layout(location = %d) out float liquid_Sky;
+			#endif""".formatted(WATER_LOCATION, SKY_LOCATION);
 	/**
 	 * Right at the start of main: the section's visibility arrives raised by 2 while water is tagged
 	 * (vanilla values are 0..1, Chunk Animations' are ≤ -1); the rest of main sees the plain value
-	 * through the macro.
+	 * through the macro. Decoded in every pipeline (the raise reaches every pass), the tag only written
+	 * in the translucent one.
 	 */
 	private static final String VANILLA_VERTEX = """
 
@@ -82,19 +103,21 @@ public final class WaterShaderPatch {
 			        liquidChunkVisibility -= 2.0;
 			    }
 			#define ChunkVisibility liquidChunkVisibility
+			#ifdef LIQUID_WATER
 			    // Water is the one tinted translucent block: its vertex colour has real chroma (glass and ice are grey).
 			    float liquidMax = max(Color.r, max(Color.g, Color.b));
 			    float liquidChroma = liquidMax > 0.02 ? (liquidMax - min(Color.r, min(Color.g, Color.b))) / liquidMax : 0.0;
 			    liquid_Water = liquidWaterGate && liquidChroma > 0.08 ? 1u : 0u;
-			    liquid_Sky = float(UV2.y) / 240.0;""";
+			    liquid_Sky = float(UV2.y) / 240.0;
+			#endif""";
 	private static final String VANILLA_INPUTS_ANCHOR = "layout(location = 4) in float chunkVisibility;";
 	private static final String VANILLA_INPUTS = """
 
 			#if defined(LIQUID_WATER) && !defined(OIT_ALPHA_ONLY) && !defined(OIT_ACCUMULATE)
 			#define LIQUID_WATER_TAG 1
-			layout(location = 5) flat in uint liquid_Water;
-			layout(location = 6) in float liquid_Sky;
-			#endif""";
+			layout(location = %d) flat in uint liquid_Water;
+			layout(location = %d) in float liquid_Sky;
+			#endif""".formatted(WATER_LOCATION, SKY_LOCATION);
 	/** Vanilla's sky light coordinate is 0..240 in steps of 16, passed on / 240. */
 	private static final String VANILLA_SKY = "uint(clamp(floor(liquid_Sky * 15.0 + 0.5), 0.0, 15.0))";
 
@@ -122,7 +145,8 @@ public final class WaterShaderPatch {
 
 	public static @Nullable String patchSodiumVertex(String source) {
 		String s = normalize(source);
-		if (!s.contains(SODIUM_OUTPUTS_ANCHOR) || !s.contains(SODIUM_INIT) || !s.contains("_vert_tex_light_coord") || s.contains("liquid_Water")) {
+		if (!s.contains(SODIUM_OUTPUTS_ANCHOR) || !s.contains(SODIUM_INIT) || !s.contains("_vert_tex_light_coord") || s.contains("liquid_Water")
+				|| usesOurLocations(s)) {
 			return null;
 		}
 		s = s.replace(SODIUM_OUTPUTS_ANCHOR, SODIUM_OUTPUTS + SODIUM_OUTPUTS_ANCHOR);
@@ -131,7 +155,8 @@ public final class WaterShaderPatch {
 
 	public static @Nullable String patchSodiumFragment(String source) {
 		String s = normalize(source);
-		if (!s.contains(SODIUM_INPUTS_ANCHOR) || count(s, FINAL_COLOR) != 1 || !s.contains("v_Color") || s.contains("liquid_Water")) {
+		if (!s.contains(SODIUM_INPUTS_ANCHOR) || count(s, FINAL_COLOR) != 1 || !s.contains("v_Color") || s.contains("liquid_Water")
+				|| usesOurLocations(s)) {
 			return null;
 		}
 		s = s.replace(SODIUM_INPUTS_ANCHOR, SODIUM_INPUTS_ANCHOR + SODIUM_INPUTS);
@@ -141,7 +166,7 @@ public final class WaterShaderPatch {
 	public static @Nullable String patchVanillaVertex(String source) {
 		String s = normalize(source);
 		if (count(s, MAIN) != 1 || !s.contains(VANILLA_OUTPUTS_ANCHOR) || !s.contains("ChunkVisibility") || !s.contains("UV2")
-				|| !s.contains("Color") || s.contains("liquid_Water")) {
+				|| !s.contains("Color") || s.contains("liquid_Water") || usesOurLocations(s)) {
 			return null;
 		}
 		s = s.replace(VANILLA_OUTPUTS_ANCHOR, VANILLA_OUTPUTS_ANCHOR + VANILLA_OUTPUTS);
@@ -150,11 +175,17 @@ public final class WaterShaderPatch {
 
 	public static @Nullable String patchVanillaFragment(String source) {
 		String s = normalize(source);
-		if (!s.contains(VANILLA_INPUTS_ANCHOR) || count(s, FINAL_COLOR) != 1 || !s.contains("vertexColor") || s.contains("liquid_Water")) {
+		if (!s.contains(VANILLA_INPUTS_ANCHOR) || count(s, FINAL_COLOR) != 1 || !s.contains("vertexColor") || s.contains("liquid_Water")
+				|| usesOurLocations(s)) {
 			return null;
 		}
 		s = s.replace(VANILLA_INPUTS_ANCHOR, VANILLA_INPUTS_ANCHOR + VANILLA_INPUTS);
 		return s.replace(FINAL_COLOR, tagBlock("vertexColor", VANILLA_SKY));
+	}
+
+	/** Something (another mod's patch) already declares a varying at one of our locations. */
+	private static boolean usesOurLocations(String s) {
+		return OUR_LOCATIONS.matcher(s).find();
 	}
 
 	private static int count(String s, String what) {

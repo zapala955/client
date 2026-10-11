@@ -99,6 +99,11 @@ public final class WaterTag {
 
 	// ---- Pipelines (class init / render thread) -------------------------------------------------
 
+	/** Both of Sodium's terrain shaders carry the patch (checked before the pipeline gets the define). */
+	public static boolean sodiumShadersPatched() {
+		return sodiumVertex && sodiumFragment;
+	}
+
 	/** Sodium built its translucent terrain pipeline with the define. */
 	public static void sodiumPipelineDefined() {
 		if (!sodiumPipeline) {
