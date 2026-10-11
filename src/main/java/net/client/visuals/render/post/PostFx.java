@@ -35,6 +35,8 @@ import net.client.visuals.render.storm.Lightning;
 import net.client.visuals.render.storm.Storm;
 import net.client.visuals.render.storm.StormRenderer;
 import net.client.visuals.render.storm.StormSounds;
+import net.client.visuals.render.water.LiquidWater;
+import net.client.visuals.render.water.WaterTag;
 import net.client.visuals.render.weather.LiquidWeather;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
@@ -64,7 +66,10 @@ import java.util.function.Supplier;
  *       opaque world, before water, particles and weather (with classic transparency the main pass is
  *       closed and reopened around them, like the haze below). AO: linear depth at half resolution
  *       with three smaller copies, the horizon search (far taps read the small copies), two
- *       depth-aware blurs, a depth-aware upsample multiplied into the frame.</li>
+ *       depth-aware blurs, a depth-aware upsample multiplied into the frame. Then Liquid Water copies
+ *       the world as it is before any water ({@code render.water.LiquidWater}).</li>
+ *   <li>Liquid Water – {@link #splitMainPass}, right after translucent terrain (classic transparency
+ *       only): the tagged water is shaded, before the haze.</li>
  *   <li>Atmosphere, in two steps so particles stay crisp (they write no depth, so a single haze
  *       over the finished world would fog them as if they were as far as the terrain behind them):
  *       <ol>
@@ -197,6 +202,8 @@ public final class PostFx {
 	private static @Nullable SkyRenderState frameSky;
 	private static @Nullable GpuBufferSlice hazeSlice;
 	private static boolean opaqueHazed;
+	/** Liquid Water drew this frame (otherwise it counts an idle frame). */
+	private static boolean waterDrawn;
 	private static @Nullable RenderPass reopened;
 	private static @Nullable GpuTexture opaqueDepth;
 	private static @Nullable GpuTextureView opaqueDepthView;
@@ -275,11 +282,18 @@ public final class PostFx {
 
 	/**
 	 * Classic transparency: vanilla's main pass is about to draw particles, clouds and weather (the
-	 * world and water are in). Closes it, hazes what's there, and hands back a reopened pass on the
-	 * same targets – or the original pass untouched when there's no haze to draw.
+	 * world and water are in). Closes it, shades Liquid Water's water, hazes what's there, and hands
+	 * back a reopened pass on the same targets – or the original pass untouched when there's nothing
+	 * to draw.
 	 */
 	public static RenderPass splitMainPass(RenderPass pass) {
-		if (opaqueHazed || !hazeWanted() || !ShaderSupport.hazeTranslucent()) {
+		WaterTag.passSeen();
+		Matrix4f projection = frameProjection;
+		CameraRenderState camera = frameCamera;
+		SkyRenderState sky = frameSky;
+		boolean water = LiquidWater.shading() && projection != null && camera != null && sky != null;
+		boolean haze = !opaqueHazed && hazeWanted() && ShaderSupport.hazeTranslucent();
+		if (!water && !haze) {
 			return pass;
 		}
 		RenderTarget target = Minecraft.getInstance().gameRenderer.mainRenderTarget();
@@ -289,7 +303,13 @@ public final class PostFx {
 			return pass;
 		}
 		pass.close(); // vanilla's pass, or the one beforeTranslucents reopened
-		hazeOpaque();
+		if (water) {
+			LiquidWater.draw(projection, camera, sky);
+			waterDrawn = true;
+		}
+		if (haze) {
+			hazeOpaque();
+		}
 		return reopen(color, depth);
 	}
 
@@ -309,7 +329,8 @@ public final class PostFx {
 	public static RenderPass beforeTranslucents(RenderPass pass) {
 		boolean ao = aoWanted();
 		boolean wet = wetWanted();
-		if (!ao && !wet) {
+		boolean water = LiquidWater.shading();
+		if (!ao && !wet && !water) {
 			idleAo();
 			return pass;
 		}
@@ -321,6 +342,10 @@ public final class PostFx {
 		}
 		pass.close();
 		beforeTranslucentsUnsplit(ao, wet);
+		if (water) {
+			// The world as it is before any water: what's under every surface.
+			LiquidWater.captureBed();
+		}
 		return reopen(color, depth);
 	}
 
@@ -404,6 +429,10 @@ public final class PostFx {
 		} catch (RuntimeException e) {
 			warnOnce(e);
 		} finally {
+			if (!waterDrawn) {
+				LiquidWater.idle();
+			}
+			waterDrawn = false;
 			frameProjection = null;
 			frameCamera = null;
 			frameSky = null;

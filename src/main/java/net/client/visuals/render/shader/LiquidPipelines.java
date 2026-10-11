@@ -675,6 +675,65 @@ public final class LiquidPipelines {
 			.withColorTargetState(new ColorTargetState(new BlendFunction(BlendFactor.DST_COLOR, BlendFactor.ONE)))
 			.build();
 
+	// ---- World: Liquid Water (render.water.LiquidWater) -------------------------------------------
+
+	/** The tileable wave field, once: slope, height and caustics (no inputs). */
+	public static final RenderPipeline WATER_NOISE = RenderPipeline.builder(RenderPipelines.POST_PROCESSING_SNIPPET)
+			.withLocation(LiquidClient.id("pipeline/water_noise"))
+			.withVertexShader("core/screenquad")
+			.withFragmentShader(LiquidClient.id("core/liquid_water"))
+			.withShaderDefine("NOISE")
+			.withColorTargetState(new ColorTargetState(Optional.empty(), GpuFormat.RGBA16_FLOAT, ColorTargetState.WRITE_ALL))
+			.build();
+
+	public static final BindGroupLayout WATER_REFLECT_INPUTS = BindGroupLayout.builder()
+			.withUniform("LiquidWater", UniformType.UNIFORM_BUFFER)
+			.withUniform("DepthSampler", UniformType.COMBINED_IMAGE_SAMPLER)
+			.withUniform("BedSampler", UniformType.COMBINED_IMAGE_SAMPLER)
+			.withUniform("BehindSampler", UniformType.COMBINED_IMAGE_SAMPLER)
+			.withUniform("WaveSampler", UniformType.COMBINED_IMAGE_SAMPLER)
+			.withUniform("FieldSampler", UniformType.COMBINED_IMAGE_SAMPLER)
+			.build();
+
+	/** Half resolution: the water's reflections (screen-space or the sky), a = the surface's distance. */
+	public static final RenderPipeline WATER_REFLECT = post("pipeline/water_reflect", "core/liquid_water", WATER_REFLECT_INPUTS)
+			.withShaderDefine("REFLECT")
+			.withColorTargetState(new ColorTargetState(Optional.empty(), GpuFormat.RGBA16_FLOAT, ColorTargetState.WRITE_ALL))
+			.build();
+
+	public static final BindGroupLayout WATER_SHAFTS_INPUTS = BindGroupLayout.builder()
+			.withUniform("LiquidWater", UniformType.UNIFORM_BUFFER)
+			.withUniform("DepthSampler", UniformType.COMBINED_IMAGE_SAMPLER)
+			.withUniform("BedSampler", UniformType.COMBINED_IMAGE_SAMPLER)
+			.withUniform("BehindSampler", UniformType.COMBINED_IMAGE_SAMPLER)
+			.withUniform("WaveSampler", UniformType.COMBINED_IMAGE_SAMPLER)
+			.build();
+
+	/** Half resolution, camera under water: light shafts from the surface. */
+	public static final RenderPipeline WATER_SHAFTS = post("pipeline/water_shafts", "core/liquid_water", WATER_SHAFTS_INPUTS)
+			.withShaderDefine("SHAFTS")
+			.withColorTargetState(new ColorTargetState(Optional.empty(), GpuFormat.RGBA16_FLOAT, ColorTargetState.WRITE_ALL))
+			.build();
+
+	public static final BindGroupLayout WATER_COMPOSITE_INPUTS = BindGroupLayout.builder()
+			.withUniform("LiquidWater", UniformType.UNIFORM_BUFFER)
+			.withUniform("DepthSampler", UniformType.COMBINED_IMAGE_SAMPLER)
+			.withUniform("BedSampler", UniformType.COMBINED_IMAGE_SAMPLER)
+			.withUniform("BehindSampler", UniformType.COMBINED_IMAGE_SAMPLER)
+			.withUniform("WaveSampler", UniformType.COMBINED_IMAGE_SAMPLER)
+			.withUniform("FieldSampler", UniformType.COMBINED_IMAGE_SAMPLER)
+			.withUniform("SceneSampler", UniformType.COMBINED_IMAGE_SAMPLER)
+			.withUniform("ReflectSampler", UniformType.COMBINED_IMAGE_SAMPLER)
+			.withUniform("ShaftSampler", UniformType.COMBINED_IMAGE_SAMPLER)
+			.withUniform("ColumnSampler", UniformType.COMBINED_IMAGE_SAMPLER)
+			.build();
+
+	/** Full resolution: the water itself over its tagged pixels (others are discarded – except under water). */
+	public static final RenderPipeline WATER_COMPOSITE = post("pipeline/water_composite", "core/liquid_water", WATER_COMPOSITE_INPUTS)
+			.withShaderDefine("COMPOSITE")
+			.withColorTargetState(ColorTargetState.DEFAULT)
+			.build();
+
 	// ---- Photo Mode (render.post.PhotoCapture) --------------------------------------------------
 
 	public static final BindGroupLayout PHOTO_FIRST_INPUTS = BindGroupLayout.builder()

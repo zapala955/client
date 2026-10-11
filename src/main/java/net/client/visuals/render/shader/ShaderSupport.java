@@ -19,6 +19,7 @@ import net.minecraft.client.renderer.oit.OitPipelineSet;
  *   <li>a post-processing shader unavailable → that effect (haze, bloom, grading) is skipped</li>
  *   <li>weather shader unavailable → vanilla rain and snow</li>
  *   <li>storm shaders unavailable → vanilla's darkened sky, vanilla's lightning bolt, a lightmap flash</li>
+ *   <li>water shaders unavailable → water is never tagged, so it stays vanilla's</li>
  * </ul>
  *
  * <p>The probe re-runs on every screen {@code init()} (cheap: a map lookup once compiled), which
@@ -54,6 +55,7 @@ public final class ShaderSupport {
 	private static boolean stormSky;
 	private static boolean stormBolts;
 	private static boolean stormLight;
+	private static boolean water;
 
 	private ShaderSupport() {
 	}
@@ -98,6 +100,8 @@ public final class ShaderSupport {
 		stormSky = compiles(LiquidPipelines.STORM_NOISE) && compiles(LiquidPipelines.STORM_SKY) && compiles(LiquidPipelines.STORM_SKY_COMPOSITE);
 		stormBolts = compiles(LiquidPipelines.STORM_BOLT);
 		stormLight = compiles(LiquidPipelines.STORM_LIGHT) && compiles(LiquidPipelines.STORM_LIGHT_APPLY);
+		water = compiles(LiquidPipelines.WATER_NOISE) && compiles(LiquidPipelines.WATER_REFLECT) && compiles(LiquidPipelines.WATER_SHAFTS)
+				&& compiles(LiquidPipelines.WATER_COMPOSITE);
 		bloom = grade && compiles(LiquidPipelines.POST_BLOOM_PREFILTER) && compiles(LiquidPipelines.POST_BLOOM_DOWNSAMPLE)
 				&& compiles(LiquidPipelines.POST_BLOOM_UPSAMPLE);
 		if ((!sdf || !backdrops) && !warned) {
@@ -243,6 +247,11 @@ public final class ShaderSupport {
 	/** Storm Chaser's flash relighting can be drawn (otherwise only the lightmap flashes). */
 	public static boolean stormLight() {
 		return stormLight;
+	}
+
+	/** Liquid Water's passes (waves, reflections, shafts, composite) can run – only then is water tagged. */
+	public static boolean water() {
+		return water;
 	}
 
 	/** HUD panels can blur the game behind them. */

@@ -17,6 +17,7 @@ import net.client.visuals.render.shader.LiquidPipelines;
 import net.client.visuals.render.shader.ShaderPacks;
 import net.client.visuals.render.shader.ShaderSupport;
 import net.client.visuals.render.storm.Storm;
+import net.client.visuals.render.water.LiquidWater;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.DynamicGpuData;
@@ -119,6 +120,10 @@ public final class LiquidWeather {
 	private static float rainWindX;
 	private static float rainWindZ;
 	private static float windStrength;
+	/** The wind's direction and its strength with gusts, for others (Liquid Water's waves); 0 when not drawing. */
+	private static float windDirX = 1f;
+	private static float windDirZ;
+	private static float windNow;
 	/** Where the storm's rain sheets are along the wind (blocks, wrapped at 4096: whole periods of both bands). */
 	private static double sheetPhase;
 
@@ -194,6 +199,9 @@ public final class LiquidWeather {
 		float snowWind = windStrength * gust * 2.2f + 0.2f;
 		rainWindX = dirX * rainWind;
 		rainWindZ = dirZ * rainWind;
+		windDirX = dirX;
+		windDirZ = dirZ;
+		windNow = windStrength * gust;
 		float fall = RAIN_SPEED * (1f + 0.12f * thunderLevel);
 
 		for (int layer = RAIN_NEAR; layer <= RAIN_FAR; layer++) {
@@ -328,7 +336,7 @@ public final class LiquidWeather {
 		AmbienceModule settings = AmbienceModule.liquidWeather();
 		long now = System.nanoTime();
 		boolean drops = level != null && settings != null && !broken && level.getRainLevel(1f) > 0f && ShaderSupport.weather();
-		boolean wet = level != null && WetWorld.visible();
+		boolean wet = level != null && (WetWorld.visible() || LiquidWater.wantsColumns() && level.getRainLevel(1f) > 0f);
 		if ((drops || wet) && !ShaderPacks.inUse()) {
 			Vec3 camera = minecraft.gameRenderer.mainCamera().position();
 			COLUMNS.update(level, Mth.floor(camera.x), Mth.floor(camera.y), Mth.floor(camera.z));
@@ -343,8 +351,22 @@ public final class LiquidWeather {
 		}
 	}
 
+	/** Wind strength with gusts (0..1.6) while Liquid Weather draws, else 0. */
+	public static float windStrength() {
+		return active && System.nanoTime() - lastDrawNanos < 500_000_000L ? windNow : 0f;
+	}
+
+	/** The wind's direction (x), unit length together with {@link #windZ()}. */
+	public static float windX() {
+		return windDirX;
+	}
+
+	public static float windZ() {
+		return windDirZ;
+	}
+
 	/**
-	 * The column texture for other effects (Wet World), uploaded and current; null until the columns
+	 * The column texture for other effects (Wet World, Liquid Water's rain rings), uploaded and current; null until the columns
 	 * around the camera have been computed for {@code level}. Render thread, outside a render pass.
 	 */
 	public static @Nullable GpuTextureView columns(ClientLevel level) {

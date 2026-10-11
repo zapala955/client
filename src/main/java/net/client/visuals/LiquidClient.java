@@ -34,6 +34,7 @@ import net.client.visuals.render.storm.Storm;
 import net.client.visuals.render.storm.StormRenderer;
 import net.client.visuals.render.storm.StormSky;
 import net.client.visuals.render.storm.StormSounds;
+import net.client.visuals.render.water.LiquidWater;
 import net.client.visuals.module.render.StormChaserModule;
 import net.client.visuals.hud.element.NotificationsElement;
 import net.client.visuals.render.text.SharpText;
@@ -192,6 +193,7 @@ public final class LiquidClient implements ClientModInitializer {
 			Rainbow.tick(minecraft);
 			Storm.tick(minecraft);
 			StormSounds.tick(minecraft);
+			LiquidWater.tick(minecraft);
 			HudManager.tick(minecraft);
 			Showcase.tick(minecraft);
 			PhotoMode.tick(minecraft);
@@ -237,6 +239,8 @@ public final class LiquidClient implements ClientModInitializer {
 			StormSounds.stop();
 			StormSky.release();
 			StormRenderer.release();
+			LiquidWater.reset();
+			LiquidWater.release();
 			HandChams.release();
 			BrowserManager.shutdown(); // the screen belongs to the world it was placed in
 		}));
@@ -251,6 +255,7 @@ public final class LiquidClient implements ClientModInitializer {
 			StormSounds.stop();
 			StormSky.release();
 			StormRenderer.release();
+			LiquidWater.release();
 			BackgroundEngine.INSTANCE.release();
 			BootArt.release();
 			BrowserManager.shutdown();
