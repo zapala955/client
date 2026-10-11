@@ -619,8 +619,10 @@ public final class WorldIntro {
 		factCount = 0;
 		BlockPos pos = entity.blockPosition();
 		level.getBiome(pos).unwrapKey().ifPresent(key -> {
-			String id = key.identifier().getNamespace() + "." + key.identifier().getPath();
-			String name = I18n.exists("biome." + id) ? I18n.get("biome." + id) : pretty(key.identifier().getPath());
+			String translationKey = "biome." + key.identifier().getNamespace() + "." + key.identifier().getPath();
+			String translated = I18n.get(translationKey);
+			// I18n.get hands the key back when there's no translation (modded biomes): prettify the id then.
+			String name = translated.equals(translationKey) ? pretty(key.identifier().getPath()) : translated;
 			addFact(0xE111, name);
 		});
 		boolean overworld = dimension == Level.OVERWORLD;
