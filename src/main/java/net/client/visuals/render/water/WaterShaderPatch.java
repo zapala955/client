@@ -13,9 +13,10 @@ import org.jspecify.annotations.Nullable;
  * <ul>
  *   <li>writes its lit tint (biome water colour × light × 0.6) as an opaque colour, and</li>
  *   <li>writes its depth with the six lowest bits replaced: {@code 0b11} (water) and the sky light
- *       (0–15) above them – only ever made smaller (further, with reverse-Z), so Sodium's shader can
- *       declare {@code depth_less} and keep the early depth test (vanilla's GLSL 330 can't declare it,
- *       so its translucent pass runs the test late); the change is at most 63 ulp (micrometres).</li>
+ *       (0–15) above them – only ever made smaller (further, with reverse-Z); the change is at most
+ *       63 ulp (micrometres). The shaders don't declare that ({@code layout(depth_less)}): on the
+ *       OpenGL backend the engine's translated GLSL carries it without the conservative-depth
+ *       extension NVIDIA's compiler requires, so the translucent pass runs its depth test late.</li>
  * </ul>
  * Every other translucent fragment clears the two tag bits (at most 3 ulp), so glass, ice, stained
  * glass, slime and honey are never mistaken for water. Which fragments are water: on Sodium, quads
@@ -74,7 +75,6 @@ public final class WaterShaderPatch {
 			#define LIQUID_WATER_TAG 1
 			layout(location = %d) flat in uint liquid_Water;
 			layout(location = %d) in float liquid_Sky;
-			layout(depth_less) out float gl_FragDepth;
 			#endif""".formatted(WATER_LOCATION, SKY_LOCATION);
 	/** Sodium's light coordinate is (level · 16 + 8) / 256. */
 	private static final String SODIUM_SKY = "uint(clamp(floor((liquid_Sky * 256.0 - 8.0) / 16.0 + 0.5), 0.0, 15.0))";
