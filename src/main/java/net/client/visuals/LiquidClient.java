@@ -22,6 +22,7 @@ import net.client.visuals.module.player.PhotoModeModule;
 import net.client.visuals.module.player.ShowcaseModule;
 import net.client.visuals.render.camera.PhotoMode;
 import net.client.visuals.render.camera.Showcase;
+import net.client.visuals.render.camera.WorldIntro;
 import net.client.visuals.render.hand.HandChams;
 import net.client.visuals.render.post.Rainbow;
 import net.client.visuals.render.post.WetLens;
@@ -105,6 +106,8 @@ public final class LiquidClient implements ClientModInitializer {
 			"key.liquidclient.photo_mode", InputConstants.Type.KEYBOARD, InputConstants.KEY_F4, CATEGORY);
 	/** Storm Chaser: call a storm in, or send it away (unbound; the module's own key works too). */
 	public static final KeyMapping STORM = unbound("key.liquidclient.storm");
+	/** World Intro: play the opening shot again, here and now (unbound). */
+	public static final KeyMapping WORLD_INTRO = unbound("key.liquidclient.world_intro");
 	public static final KeyMapping MEDIA_PLAY_PAUSE = unbound("key.liquidclient.media_toggle");
 	public static final KeyMapping MEDIA_NEXT = unbound("key.liquidclient.media_next");
 	public static final KeyMapping MEDIA_PREVIOUS = unbound("key.liquidclient.media_previous");
@@ -136,6 +139,7 @@ public final class LiquidClient implements ClientModInitializer {
 		KeyMappingHelper.registerKeyMapping(SHOWCASE);
 		KeyMappingHelper.registerKeyMapping(PHOTO_MODE);
 		KeyMappingHelper.registerKeyMapping(STORM);
+		KeyMappingHelper.registerKeyMapping(WORLD_INTRO);
 		KeyMappingHelper.registerKeyMapping(MEDIA_PLAY_PAUSE);
 		KeyMappingHelper.registerKeyMapping(MEDIA_NEXT);
 		KeyMappingHelper.registerKeyMapping(MEDIA_PREVIOUS);
@@ -163,6 +167,11 @@ public final class LiquidClient implements ClientModInitializer {
 				// Leaving is handled by Photo Mode itself (the key never reaches here while it's open).
 				if (minecraft.gui.screen() == null && minecraft.level != null && minecraft.player != null) {
 					ModuleManager.get(PhotoModeModule.class).setEnabled(true);
+				}
+			}
+			while (WORLD_INTRO.consumeClick()) {
+				if (minecraft.gui.screen() == null) {
+					WorldIntro.playNow();
 				}
 			}
 			while (STORM.consumeClick()) {
@@ -194,6 +203,7 @@ public final class LiquidClient implements ClientModInitializer {
 			Storm.tick(minecraft);
 			StormSounds.tick(minecraft);
 			LiquidWater.tick(minecraft);
+			WorldIntro.tick(minecraft);
 			HudManager.tick(minecraft);
 			Showcase.tick(minecraft);
 			PhotoMode.tick(minecraft);
@@ -222,6 +232,8 @@ public final class LiquidClient implements ClientModInitializer {
 
 		ClientPlayConnectionEvents.JOIN.register((listener, sender, minecraft) -> {
 			rememberServer(minecraft);
+			// World Intro: the opening shot, once the world has loaded around you.
+			minecraft.execute(WorldIntro::onJoin);
 			// Menu wallpapers aren't needed in game; the loading screens still show it while the
 			// world loads, so it's released after the usual grace period instead of right away.
 			minecraft.execute(BackgroundEngine.INSTANCE::onMenuHidden);
@@ -241,6 +253,7 @@ public final class LiquidClient implements ClientModInitializer {
 			StormRenderer.release();
 			LiquidWater.reset();
 			LiquidWater.release();
+			WorldIntro.reset();
 			HandChams.release();
 			BrowserManager.shutdown(); // the screen belongs to the world it was placed in
 		}));

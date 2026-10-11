@@ -29,6 +29,7 @@ import net.client.visuals.module.render.AtmosphereModule;
 import net.client.visuals.module.render.BloomModule;
 import net.client.visuals.module.player.PhotoModeModule;
 import net.client.visuals.module.player.ShowcaseModule;
+import net.client.visuals.module.player.WorldIntroModule;
 import net.client.visuals.module.render.AmbientOcclusionModule;
 import net.client.visuals.module.render.HandChamsModule;
 import net.client.visuals.module.render.MotionBlurModule;
@@ -112,6 +113,7 @@ public final class ModuleManager {
 		register(new DepthOfFieldModule());
 		register(new ShowcaseModule());
 		register(new PhotoModeModule());
+		register(new WorldIntroModule());
 		register(new WavingPlantsModule());
 		register(new HudTheme());
 		register(new MusicElement());

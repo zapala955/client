@@ -3,6 +3,7 @@ package net.client.visuals.mixin.visual;
 import com.llamalad7.mixinextras.injector.ModifyReturnValue;
 import net.client.visuals.render.camera.PhotoMode;
 import net.client.visuals.render.camera.Showcase;
+import net.client.visuals.render.camera.WorldIntro;
 import net.minecraft.client.Camera;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.Level;
@@ -16,9 +17,10 @@ import org.spongepowered.asm.mixin.injection.ModifyArg;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 /**
- * Showcase and Photo Mode: after vanilla aligns the camera with the player each frame, either may
- * take it over – position, rotation, detached (so the player model is drawn) – and set the lens.
- * Photo Mode comes first (it switches Showcase off). While its camera is rolled, culling uses a
+ * Showcase, World Intro and Photo Mode: after vanilla aligns the camera with the player each frame,
+ * any of them may take it over – position, rotation, detached (so the player model is drawn) – and
+ * set the lens. Photo Mode comes first (it switches Showcase off), then World Intro (which steps aside
+ * for both). While its camera is rolled, culling uses a
  * wider view so the screen's corners never miss chunks.
  */
 @Mixin(Camera.class)
@@ -46,6 +48,13 @@ public abstract class CameraShowcaseMixin {
 			detached = true;
 			return;
 		}
+		int intro = WorldIntro.apply(entity, level, partialTicks);
+		if (intro != WorldIntro.VANILLA) {
+			setRotation(WorldIntro.yaw(), WorldIntro.pitch());
+			setPosition(new Vec3(WorldIntro.x(), WorldIntro.y(), WorldIntro.z()));
+			detached = intro == WorldIntro.SHOT;
+			return;
+		}
 		int state = Showcase.apply(entity, level, partialTicks);
 		if (state != Showcase.VANILLA) {
 			setRotation(Showcase.yaw(), Showcase.pitch());
@@ -56,7 +65,7 @@ public abstract class CameraShowcaseMixin {
 
 	@ModifyReturnValue(method = "calculateFov", at = @At("RETURN"))
 	private float liquid$showcaseLens(float fov) {
-		return PhotoMode.active() ? PhotoMode.fov() : Showcase.fov(fov);
+		return PhotoMode.active() ? PhotoMode.fov() : Showcase.fov(WorldIntro.fov(fov));
 	}
 
 	@ModifyArg(method = "createProjectionMatrixForCulling", at = @At(value = "INVOKE", target = "Lorg/joml/Matrix4f;perspective(FFFFZ)Lorg/joml/Matrix4f;"),

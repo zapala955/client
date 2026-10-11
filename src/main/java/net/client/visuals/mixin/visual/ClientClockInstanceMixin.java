@@ -2,6 +2,7 @@ package net.client.visuals.mixin.visual;
 
 import com.llamalad7.mixinextras.injector.ModifyReturnValue;
 import net.client.visuals.module.render.AmbienceModule;
+import net.client.visuals.render.camera.WorldIntro;
 import net.minecraft.client.ClientClockManager;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -16,6 +17,7 @@ import org.spongepowered.asm.mixin.injection.At;
 public abstract class ClientClockInstanceMixin {
 	@ModifyReturnValue(method = "totalTicks", at = @At("RETURN"))
 	private long liquid$customTime(long original) {
+		WorldIntro.observeClock(original); // the title card's day count and time of day
 		long day = AmbienceModule.dayTicks();
 		return day < 0L ? original : Math.floorDiv(original, 24000L) * 24000L + day;
 	}

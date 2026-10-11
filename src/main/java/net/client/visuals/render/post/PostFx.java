@@ -28,6 +28,7 @@ import net.client.visuals.module.player.PhotoModeModule;
 import net.client.visuals.module.render.SunRaysModule;
 import net.client.visuals.render.ColorUtil;
 import net.client.visuals.render.camera.PhotoMode;
+import net.client.visuals.render.camera.WorldIntro;
 import net.client.visuals.render.shader.LiquidPipelines;
 import net.client.visuals.render.shader.ShaderPacks;
 import net.client.visuals.render.shader.ShaderSupport;
@@ -679,8 +680,9 @@ public final class PostFx {
 			m = depthOfField = ModuleManager.get(DepthOfFieldModule.class);
 		}
 		Matrix4f projection = frameProjection;
-		// In Photo Mode only the camera's own depth of field counts (off = everything sharp).
-		boolean wanted = PhotoMode.active() ? PhotoMode.depthOfField() : m.isEnabled();
+		// In Photo Mode only the camera's own depth of field counts (off = everything sharp); World Intro's
+		// shot pulls focus with it whether or not the module is on.
+		boolean wanted = PhotoMode.active() ? PhotoMode.depthOfField() : m.isEnabled() || WorldIntro.dofActive();
 		if (!wanted || !ShaderSupport.dof() || ShaderPacks.inUse() || projection == null || frameCamera == null) {
 			return false;
 		}
@@ -757,10 +759,19 @@ public final class PostFx {
 			focal = m.focalLength.getFloat() * 0.001f * zoom;
 		}
 		float aperture = photo ? p.aperture.getFloat() : m.aperture.getFloat();
+		// World Intro: a manual pull from far over the land onto you, opening up as it comes in, then
+		// closing to sharp as the camera enters your eyes.
+		boolean intro = !photo && WorldIntro.dofActive();
+		if (intro) {
+			aperture = Mth.lerp(WorldIntro.dofAmount(), 16f, 2.4f);
+		}
 		float perDiopter = focal * focal / (2f * aperture * 0.024f) * hh;
-		float maxCoc = Math.min(48f, (photo ? 4.5f : m.maxBlur.getFloat()) / 100f * hh);
-		int mode = photo ? (p.focusMode.index() == PhotoModeModule.FOCUS_MANUAL ? 1 : 0) : m.focusMode.index();
-		float distance = photo ? p.focusDistance.getFloat() : m.focusDistance.getFloat();
+		float maxCoc = Math.min(48f, (photo ? 4.5f : intro ? 3.5f : m.maxBlur.getFloat()) / 100f * hh);
+		if (intro) {
+			maxCoc *= WorldIntro.dofAmount();
+		}
+		int mode = photo ? (p.focusMode.index() == PhotoModeModule.FOCUS_MANUAL ? 1 : 0) : intro ? 1 : m.focusMode.index();
+		float distance = photo ? p.focusDistance.getFloat() : intro ? WorldIntro.focusDistance() : m.focusDistance.getFloat();
 		DOF.vec4(4, perDiopter, maxCoc, photo || m.nearBlur.get() ? 1f : 0f, mode);
 		DOF.vec4(5, 1f / distance, ease, m.tiltPosition.getFloat() / 100f, m.tiltWidth.getFloat() / 200f);
 		// Highlights: up to 31× brighter at full white (30 · s^1.5); fringing: ±12 % CoC per channel at most.
@@ -1067,7 +1078,9 @@ public final class PostFx {
 		double y = camera.pos.y;
 		double z = camera.pos.z;
 		try {
-			if (color == null || !m.isEnabled() || PhotoMode.active() || !ShaderSupport.motion() || ShaderPacks.inUse() || Minecraft.getInstance().isPaused()
+			// Motion Blur rests during World Intro's shot (the camera glides; blur would only smear it).
+			if (color == null || !m.isEnabled() || PhotoMode.active() || WorldIntro.active() || !ShaderSupport.motion() || ShaderPacks.inUse()
+					|| Minecraft.getInstance().isPaused()
 					|| !previousValid || dt <= 0f || dt > 0.25f) {
 				return;
 			}

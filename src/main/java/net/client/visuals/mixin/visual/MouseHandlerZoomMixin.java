@@ -5,6 +5,7 @@ import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import net.client.visuals.render.camera.PhotoMode;
 import net.client.visuals.render.camera.Showcase;
+import net.client.visuals.render.camera.WorldIntro;
 import net.client.visuals.module.utility.ZoomModule;
 import net.minecraft.client.MouseHandler;
 import net.minecraft.client.player.LocalPlayer;
@@ -37,6 +38,7 @@ public abstract class MouseHandlerZoomMixin {
 	@Inject(method = "onScroll", at = @At(value = "INVOKE",
 			target = "Lnet/minecraft/client/ScrollWheelHandler;onMouseScroll(DD)Lorg/joml/Vector2i;"), cancellable = true)
 	private void liquid$zoomScroll(long handle, double xoffset, double yoffset, CallbackInfo ci) {
+		WorldIntro.onInput(); // scrolling skips the intro too
 		if (PhotoMode.scroll(yoffset) || Showcase.scroll(yoffset) || ZoomModule.onScroll(yoffset)) {
 			ci.cancel();
 		}
