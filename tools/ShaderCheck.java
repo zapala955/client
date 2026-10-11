@@ -27,12 +27,20 @@ import static org.lwjgl.util.shaderc.Shaderc.*;
  * compiled for each of their stages (depth bounds, transmittance, accumulate) with 8 and 16
  * coefficients. Not part of the build.
  *
+ * <p>The terrain shaders are checked with our source patches applied ({@code TerrainShaderPatch}:
+ * Chunk Animations, Waving Plants; {@code WaterShaderPatch}: Liquid Water) in every pass they're
+ * used for – solid, cutout, translucent with and without the water tag, the OIT stages – vanilla's
+ * always, Sodium's when its shaders are given. That needs the two patch classes on the class path
+ * (they have no Minecraft types): compile them first, e.g.</p>
  * <pre>
- * java -cp lwjgl.jar:lwjgl-natives-linux.jar:lwjgl-shaderc.jar:lwjgl-shaderc-natives-linux.jar \
- *      tools/ShaderCheck.java &lt;minecraft client jar | folder holding assets/minecraft/shaders or include/ + core/&gt;
+ * javac -cp jspecify.jar -d /tmp/patches src/main/java/net/client/visuals/render/chunk/TerrainShaderPatch.java \
+ *       src/main/java/net/client/visuals/render/water/WaterShaderPatch.java
+ * java -cp /tmp/patches:lwjgl.jar:lwjgl-natives-linux.jar:lwjgl-shaderc.jar:lwjgl-shaderc-natives-linux.jar \
+ *      tools/ShaderCheck.java &lt;minecraft client jar | folder holding assets/minecraft/shaders or include/ + core/&gt; \
+ *      [&lt;sodium jar | folder holding assets/sodium/shaders or blocks/ + include/&gt;]
  * </pre>
  * The LWJGL jars are in the Gradle cache once the project has been built (or on Maven Central).
- * Exits with 1 if anything fails to compile.
+ * Exits with 1 if anything fails to compile (or a patch no longer applies).
  */
 public final class ShaderCheck {
 	private static final Path ROOT = Path.of("src/main/resources/assets/liquidclient/shaders");
@@ -40,6 +48,10 @@ public final class ShaderCheck {
 	private static final Map<String, String> VANILLA = new LinkedHashMap<>();
 	private static ZipFile jar;
 	private static Path vanillaDir;
+	private static ZipFile sodiumJar;
+	private static Path sodiumDir;
+	/** Patched sources by "namespace:path", served before the files. */
+	private static final Map<String, String> PATCHED = new LinkedHashMap<>();
 
 	record Variant(String name, String vertex, String fragment, List<String> defines) {
 	}
@@ -55,7 +67,16 @@ public final class ShaderCheck {
 		} else {
 			vanillaDir = Files.isDirectory(vanilla.resolve("assets/minecraft/shaders")) ? vanilla.resolve("assets/minecraft/shaders") : vanilla;
 		}
+		if (args.length > 1) {
+			Path sodium = Path.of(args[1]);
+			if (sodium.toString().endsWith(".jar")) {
+				sodiumJar = new ZipFile(sodium.toFile());
+			} else {
+				sodiumDir = Files.isDirectory(sodium.resolve("assets/sodium/shaders")) ? sodium.resolve("assets/sodium/shaders") : sodium;
+			}
+		}
 		List<Variant> variants = variants(Files.readString(PIPELINES));
+		int terrainFailures = terrain(variants);
 
 		long compiler = shaderc_compiler_initialize();
 		int failures = 0;
@@ -83,8 +104,100 @@ public final class ShaderCheck {
 			}
 		}
 		shaderc_compiler_release(compiler);
+		failures += terrainFailures;
 		System.out.println(compiled + " shader variants compiled (" + variants.size() + " pipeline variants), " + failures + " failed");
 		System.exit(failures == 0 ? 0 : 1);
+	}
+
+	/**
+	 * Patches the terrain shaders (reflectively: the patch classes must be on the class path) and adds
+	 * their variants: every pass, the water tag, multidraw (vanilla), the OIT stages. Returns failed patches.
+	 */
+	static int terrain(List<Variant> out) {
+		Class<?> chunk;
+		Class<?> water;
+		try {
+			chunk = Class.forName("net.client.visuals.render.chunk.TerrainShaderPatch");
+			water = Class.forName("net.client.visuals.render.water.WaterShaderPatch");
+		} catch (ClassNotFoundException e) {
+			System.out.println("SKIP  terrain shaders (TerrainShaderPatch / WaterShaderPatch not on the class path)");
+			return 0;
+		}
+		int failures = 0;
+		List<String[]> passes = List.of(new String[0], new String[]{"ALPHA_CUTOUT=0.5"}, new String[]{"LIQUID_WATER"},
+				new String[]{"ALPHA_CUTOUT=0.1", "LIQUID_WATER"});
+		List<String[]> oit = new ArrayList<>();
+		oit.add(new String[0]);
+		for (String[] stage : new String[][]{{"OIT_ALPHA_ONLY", "OIT_DEPTH_BOUNDS"}, {"OIT_ALPHA_ONLY", "OIT_TRANSMITTANCE"}, {"OIT_ACCUMULATE"}}) {
+			List<String> all = new ArrayList<>(List.of("OIT", "OIT_COEFF_COUNT=8", "OIT_COEFF_ATTACHMENT_COUNT=2", "OIT_WAVELET_RANK=2"));
+			all.addAll(List.of(stage));
+			oit.add(all.toArray(new String[0]));
+		}
+		try {
+			String vsh = load("minecraft:core/terrain.vsh");
+			String fsh = load("minecraft:core/terrain.fsh");
+			String v = (String) chunk.getMethod("patchVanilla", String.class).invoke(null, vsh);
+			v = (String) water.getMethod("patchVanillaVertex", String.class).invoke(null, v != null ? v : vsh);
+			String f = (String) water.getMethod("patchVanillaFragment", String.class).invoke(null, fsh);
+			if (v == null || f == null) {
+				System.out.println("FAIL  vanilla terrain: a patch no longer applies (vertex " + (v != null) + ", fragment " + (f != null) + ")");
+				failures++;
+			} else {
+				PATCHED.put("minecraft:core/terrain.vsh", v);
+				PATCHED.put("minecraft:core/terrain.fsh", f);
+				for (String multidraw : new String[]{null, "MULTIDRAW_TERRAIN"}) {
+					for (String[] pass : passes) {
+						for (String[] stage : oit) {
+							List<String> defines = new ArrayList<>(List.of(pass));
+							defines.addAll(List.of(stage));
+							if (multidraw != null) {
+								defines.add(multidraw);
+							}
+							out.add(new Variant("vanilla terrain " + defines, "minecraft:core/terrain", "minecraft:core/terrain", defines));
+						}
+					}
+				}
+			}
+		} catch (IOException | ReflectiveOperationException e) {
+			System.out.println("FAIL  vanilla terrain: " + e);
+			failures++;
+		}
+		if (sodiumJar == null && sodiumDir == null) {
+			System.out.println("SKIP  Sodium terrain shaders (no Sodium jar / folder given)");
+			return failures;
+		}
+		try {
+			String include = load("sodium:chunk_vertex.glsl");
+			String vsh = load("sodium:blocks/block_layer_opaque.vsh");
+			String fsh = load("sodium:blocks/block_layer_opaque.fsh");
+			String i = (String) chunk.getMethod("patchSodiumVertexInclude", String.class).invoke(null, include);
+			String v = (String) chunk.getMethod("patchSodium", String.class).invoke(null, vsh);
+			v = (String) water.getMethod("patchSodiumVertex", String.class).invoke(null, v != null ? v : vsh);
+			String f = (String) water.getMethod("patchSodiumFragment", String.class).invoke(null, fsh);
+			if (i == null || v == null || f == null) {
+				System.out.println("FAIL  Sodium terrain: a patch no longer applies (include " + (i != null) + ", vertex " + (v != null)
+						+ ", fragment " + (f != null) + ")");
+				failures++;
+			} else {
+				PATCHED.put("sodium:include/chunk_vertex.glsl", i);
+				PATCHED.put("sodium:blocks/block_layer_opaque.vsh", v);
+				PATCHED.put("sodium:blocks/block_layer_opaque.fsh", f);
+				List<String[]> sodiumPasses = List.of(new String[0], new String[]{"ALPHA_CUTOUT=0.5"}, new String[]{"ALPHA_CUTOUT=0.01", "LIQUID_WATER"});
+				for (String[] pass : sodiumPasses) {
+					for (String[] stage : oit) {
+						// VULKAN is predefined when compiling for Vulkan (Sodium's push constants depend on it).
+						List<String> defines = new ArrayList<>(List.of("USE_VERTEX_COMPRESSION", "USE_FOG"));
+						defines.addAll(List.of(pass));
+						defines.addAll(List.of(stage));
+						out.add(new Variant("Sodium terrain " + defines, "sodium:blocks/block_layer_opaque", "sodium:blocks/block_layer_opaque", defines));
+					}
+				}
+			}
+		} catch (IOException | ReflectiveOperationException e) {
+			System.out.println("FAIL  Sodium terrain: " + e);
+			failures++;
+		}
+		return failures;
 	}
 
 	/** Pipelines and their shaders / defines, read from LiquidPipelines.java. */
@@ -217,8 +330,27 @@ public final class ShaderCheck {
 		if (path.endsWith(".glsl") && !path.startsWith("include/")) {
 			path = "include/" + path;
 		}
+		String patched = PATCHED.get(namespace + ":" + path);
+		if (patched != null) {
+			return patched;
+		}
 		if (namespace.equals("liquidclient")) {
 			return Files.readString(ROOT.resolve(path));
+		}
+		if (namespace.equals("sodium")) {
+			if (sodiumJar != null) {
+				var entry = sodiumJar.getEntry("assets/sodium/shaders/" + path);
+				if (entry == null) {
+					throw new IOException("not in the Sodium jar: " + path);
+				}
+				try (InputStream in = sodiumJar.getInputStream(entry)) {
+					return new String(in.readAllBytes(), StandardCharsets.UTF_8);
+				}
+			}
+			if (sodiumDir != null) {
+				return Files.readString(sodiumDir.resolve(path));
+			}
+			throw new IOException("no Sodium shaders given: " + path);
 		}
 		String cached = VANILLA.get(path);
 		if (cached != null) {

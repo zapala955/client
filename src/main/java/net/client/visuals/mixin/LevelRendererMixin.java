@@ -4,6 +4,7 @@ import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.mojang.renderpearl.api.commands.RenderPass;
 import net.client.visuals.render.chunk.ChunkAnimator;
+import net.client.visuals.render.water.WaterTag;
 import net.client.visuals.render.post.PostFx;
 import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.client.renderer.chunk.SectionRenderDispatcher;
@@ -15,9 +16,9 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 /**
  * <ul>
- *   <li>Vanilla terrain path of Chunk Animations: the per-section visibility written into the
- *       section uniforms carries the animation state while a section animates. With Sodium this
- *       method never runs.</li>
+ *   <li>Vanilla terrain path of Chunk Animations and Liquid Water: the per-section visibility written
+ *       into the section uniforms carries the animation state while a section animates, and is
+ *       raised by 2 while water is tagged. With Sodium this method never runs.</li>
  *   <li>Wet World: drawn over the opaque world at the start of the translucent step, in a pass of
  *       its own ({@code PostFx#beforeTranslucents} closes vanilla's and reopens it).</li>
  *   <li>Atmosphere: hazes the world right before particles are drawn (classic transparency: after
@@ -34,7 +35,7 @@ public abstract class LevelRendererMixin {
 	@WrapOperation(method = "extractSectionDrawGroups", at = @At(value = "INVOKE",
 			target = "Lnet/minecraft/client/renderer/chunk/SectionRenderDispatcher$RenderSection;getVisibility(JJ)F"), require = 0)
 	private float liquid$chunkAnimation(SectionRenderDispatcher.RenderSection section, long now, long fadeDuration, Operation<Float> original) {
-		return ChunkAnimator.vanillaVisibility(section, now, original.call(section, now, fadeDuration));
+		return WaterTag.vanillaVisibility(ChunkAnimator.vanillaVisibility(section, now, original.call(section, now, fadeDuration)));
 	}
 
 	/** Start of the translucent step: the opaque world is complete, nothing translucent drawn yet. */
