@@ -82,9 +82,13 @@ public final class WorldIntro {
 	private static final double HOSTILE_RANGE = 12.0;
 
 	private static final int IDLE = 0;
+	/** Requested; the loading screen is still up. */
 	private static final int ARMED = 1;
-	private static final int PARKED = 2;
-	private static final int PLAYING = 3;
+	/** The loading screen is gone: black, waiting for the land under the shot to load. */
+	private static final int LOADING = 2;
+	/** Planned; parked at the start behind black while the renderer catches up. */
+	private static final int PARKED = 3;
+	private static final int PLAYING = 4;
 
 	private static int state = IDLE;
 	private static boolean dimensionChange;
@@ -216,7 +220,7 @@ public final class WorldIntro {
 			end(minecraft);
 			return;
 		}
-		if (state == PLAYING || state == PARKED) {
+		if (active()) {
 			// Damage, danger or a screen ends it at once.
 			float health = player.getHealth();
 			boolean hurt = lastHealth >= 0f && health < lastHealth - 0.01f || player.hurtTime > 0;
@@ -235,7 +239,7 @@ public final class WorldIntro {
 
 	/** A key, click or scroll: skips the intro (the input itself goes through untouched). */
 	public static void onInput() {
-		if (state == PARKED || state == PLAYING) {
+		if (active()) {
 			end(Minecraft.getInstance());
 		}
 	}
@@ -254,11 +258,14 @@ public final class WorldIntro {
 		float eyeYaw = entity.getViewYRot(partialTicks);
 		float eyePitch = entity.getViewXRot(partialTicks);
 		if (state == ARMED) {
-			// Wait for the loading screen to go (however long the world takes), then for the land under
-			// the shot to load – as far as the server lets us see.
+			// Wait for the loading screen to go (however long the world takes)...
 			if (minecraft.gui.screen() != null) {
 				return VANILLA;
 			}
+			state = LOADING;
+		}
+		if (state == LOADING) {
+			// ...then, behind black, for the land under the shot to load – as far as the server lets us see.
 			waited += dt;
 			if (waited > MAX_WAIT) {
 				end(minecraft);
@@ -539,9 +546,9 @@ public final class WorldIntro {
 
 	// ---- What the rest of the client asks ----------------------------------------------------------
 
-	/** The intro owns the screen (parked behind black or playing). */
+	/** The intro owns the screen (behind black while the world loads and the camera parks, or playing). */
 	public static boolean active() {
-		return state == PARKED || state == PLAYING;
+		return state == LOADING || state == PARKED || state == PLAYING;
 	}
 
 	public static boolean hudHidden() {
@@ -687,7 +694,7 @@ public final class WorldIntro {
 		float u = state == PLAYING ? Math.min(1f, played / duration) : 0f;
 		float t = state == PLAYING ? played : 0f;
 
-		float black = state == PARKED ? 1f : 1f - smoothstep(t / FADE_IN);
+		float black = state == PLAYING ? 1f - smoothstep(t / FADE_IN) : 1f;
 		float bars = m.letterbox.get() ? 1f - smoothstep((u - 0.82f) / 0.16f) : 0f;
 		if (bars > 0.001f) {
 			float bar = h * 0.105f * bars;
