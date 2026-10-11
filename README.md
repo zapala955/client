@@ -170,6 +170,19 @@ shader wallpapers, a keybind-activated ClickGUI, a module system and the first v
   frames rendered with sub-pixel jitter and new noise seeds in linear light (anti-aliased, Depth of
   Field and AO noise gone), crops to the aspect ratio and saves a PNG to the screenshots folder, with
   a synthesised DSLR shutter sound, a blink and a thumbnail.
+* **World Intro** (Player) – when you join a world or server, a cinematic drone shot reveals where
+  you are, then glides into your eyes like a game's opening. Orbit Reveal (a wide sweep around you
+  from high and far), High Drone Descent (from 60 blocks up, turning as it drops) or Dolly In (pushing
+  in from far behind). It waits behind black until the land under the shot has loaded – as far as the
+  server lets you see – parks at the start so the view is built before the fade-in, and flies only
+  through loaded chunks and never through blocks: every path is lifted clear of the terrain, smoothed
+  and raycast, with other variants tried when one is blocked (indoors there's no flight, just the
+  card). The hand-over blends position and rotation into your live eyes, like Showcase. A glass title
+  card (world or server – or the dimension you entered – biome, time of day, weather, day count),
+  letterbox bars, no HUD; Depth of Field pulls focus from far over the land onto you, Motion Blur
+  rests. Any key, click or scroll skips it instantly, and so does taking damage, a hostile mob within
+  12 blocks or a screen opening; input is never held, on servers you can always act. On world join /
+  also on dimension change / off (its key plays it any time), style, duration, title card, letterbox.
 * **Zoom** (Utility) – hold C: a smooth, frame-rate independent zoom (factor and speed), scroll to
   zoom further, sensitivity that follows the zoom, optional cinematic camera.
 * **Rainbows** (Render) – when a real rain clears and the sun comes out, a rainbow arcs across the sky
@@ -213,6 +226,28 @@ shader wallpapers, a keybind-activated ClickGUI, a module system and the first v
   sky and the relighting in half resolution (full resolution costs about four times as much for
   those two); quality trims the sky's samples. If its shaders can't compile or an Iris shader pack is
   on, the storm keeps its rain, sounds and darkened vanilla sky and strikes with vanilla bolts nearby.
+* **Liquid Water** (Render) – real water in place of vanilla's flat sheets, in the overworld. Layered,
+  normal-mapped waves – a long swell and three drifting layers of a wave field generated once on the
+  GPU – driven by the wind (Liquid Weather's, Storm Chaser's, rain and thunder): choppy in a storm,
+  glassy on a calm pond (how open the water around is decides), flowing down slopes and falls.
+  Reflections of the world in screen space, and where a ray leaves the screen the sky as it's
+  actually drawn in that direction (Skybox modes, the storm) or a gradient of the sky and fog colours;
+  Fresnel from see-through looking down to a mirror at grazing angles. Refraction by the waves;
+  colour and clarity by the path through the water – clear turquoise shallows, deep blue, murky swamps,
+  following the biome's water colour – with natural / tropical / deep ocean styles. Foam: lapping
+  lines along shores, rings around things standing in the water, white streaks down falls and churn
+  under them, whitecaps in storms. Caustics dancing on the bed in sunlight (from where the waves focus
+  the light), rain rings wherever it rains on water (Liquid Weather's rain columns; heavier in a
+  storm), the sun's and moon's glints and sparkles. Under water: caustics and depth on the terrain,
+  light shafts from the surface, the colour absorbed with depth, and the surface overhead with
+  Snell's window and total internal reflection; vanilla's fog and mechanics stay. The terrain shaders
+  (Sodium's, or vanilla's as a fallback) tag water while drawing it – its lit biome colour, and a tag
+  in the lowest bits of its depth – so glass, ice and stained glass are never taken for water; the
+  water is then shaded right after translucent terrain, with reflections and shafts at half
+  resolution. Wave strength, reflections (off / sky only / screen-space), refraction, foam, caustics,
+  rain ripples, water clarity, colour style, underwater effects, quality. Steps aside with an Iris
+  shader pack and with Improved Transparency (OIT): water stays vanilla's then. Budgeted at about
+  1.5 ms on a GTX 1650 at 1080p with water on screen – measure your own card with `tools/GpuBench.java`.
 * **Ambient Occlusion** (Render) – soft contact shadows where light can't reach: in corners, where
   blocks meet, under leaves and overhangs, around mobs' feet. Horizon-based (HBAO) from the depth
   buffer: per pixel, the horizon the surrounding geometry raises above the surface in several rotated
@@ -316,8 +351,8 @@ net.client.visuals
 ├── LiquidConfig            interface preferences → config/liquidclient.json
 ├── module                  Module (icon, keybind), Category, ModuleManager (JSON persistence, keybinds), setting/*,
 │                           render/ (Skybox, ChunkAnimations, Ambience, CustomFog, Removals, ViewModel, KillEffects,
-│                           Particles, Atmosphere, Lighting, ColorGrading, Bloom, WavingPlants, StormChaser),
-│                           utility/ (Zoom, Browser)
+│                           Particles, Atmosphere, Lighting, ColorGrading, Bloom, WavingPlants, StormChaser, LiquidWater),
+│                           player/ (Showcase, PhotoMode, WorldIntro), utility/ (Zoom, Browser)
 ├── hud                     HudManager, HudModule, HudStyle, HudTheme, element/* (incl. TargetHud, ModuleList, Notifications, Lyrics)
 ├── gui
 │   ├── LiquidScreen        marker interface for our screens
@@ -356,6 +391,9 @@ net.client.visuals
 │   ├── weather/            LiquidWeather (GPU rain, snow, splashes), WeatherColumns (surface / type / light per column)
 │   ├── storm/              Storm (Storm Chaser timeline), StormSky (storm clouds, fog, lightmap), Lightning (strikes,
 │   │                       flashes), BoltGenerator, StormRenderer (bolts, flash relighting), StormSounds (thunder, beds)
+│   ├── water/              LiquidWater (Liquid Water's passes and resources), WaterTag (whether water is tagged),
+│   │                       WaterShaderPatch (the terrain shaders' water tag), WaterField (openness, falls around the camera)
+│   ├── camera/             Showcase, PhotoMode, WorldIntro (the opening shot: planning, camera, title card)
 │   └── shader/             LiquidPipelines, ShaderSupport, ShaderPacks (Iris check), BlurEngine
 └── mixin                   GuiMixin, GuiRenderStateMixin, GameRendererMixin, SkyRendererMixin, FogRendererMixin, CloudRendererMixin,
                             LoadingOverlayMixin, loading/ (Connect, GenericMessage, LevelLoading, Progress screens),
@@ -389,6 +427,8 @@ net.client.visuals
 | Zoom | `visual.CameraZoomMixin` (`Camera#calculateFov`), `visual.MouseHandlerZoomMixin` (`LocalPlayer#turn` in `turnPlayer`, `Options.smoothCamera`, `ScrollWheelHandler#onMouseScroll` in `onScroll`) | The hand keeps its own FOV; the hotbar doesn't scroll while zooming. |
 | Particles | `AmbientParticles.tick` (`END_CLIENT_TICK`) adds `AmbientParticle`s to `Minecraft.particleEngine`; each overrides `SingleQuadParticle#extract` and submits to custom `SingleQuadParticle.Layer`s (`LiquidPipelines.PARTICLE_GLOW` / `PARTICLE_SOFT` + their OIT sets) | No mixin and no particle type: vanilla ticks, culls and draws them, and the quad renderer binds each layer's own pipeline. The live count is taken from the particles' own ticks, so engine clears (world change, reload) never desync it. |
 | Atmosphere | `GameRendererMixin` (projection before `LevelRenderer#render`, second pass before `render3dHud`), `LevelRendererMixin` (`@ModifyVariable` on the render pass at `executeTranslucentAfterTerrain` in `executeClassicTransparency`, closed at `RETURN`; `executeOit` HEAD) | Vanilla draws water, then particles, clouds and weather in one render pass. That pass is closed (idempotent), the world hazed from a depth copy, and reopened, so particles – no depth writes – aren't fogged like the terrain behind them. A second pass hazes only what came nearer since. Falls back to one pass after the world. |
+| Liquid Water | `ShaderManagerMixin` (patches the terrain shaders' sources), `sodium.SodiumShaderChunkRendererMixin` (`@Pseudo`: the `LIQUID_WATER` define on Sodium's translucent pipeline – the one with an alpha cutoff of 0.01 – in `createShader`), `sodium.SodiumFluidRendererMixin` (`@Pseudo`: `DefaultFluidRenderer#render` HEAD / RETURN marks the meshing thread inside water) and `sodium.SodiumMeshBufferMixin` (`@Pseudo`: `Material#bits()` in `ChunkMeshBufferBuilder#push` gets bit 5); vanilla: `RenderPipelinesMixin` (wraps `RenderPipeline$Builder#build` in `RenderPipelines`' static init: pipelines named "translucent" get the define) and the per-section visibility in `LevelRendererMixin` (raised by 2 while water is tagged); `LevelRendererMixin`'s existing translucent hooks run the copies and the passes (`PostFx#beforeTranslucents`, `#splitMainPass`) | Water is drawn by the terrain renderer; only it knows which quads are water. The tag lives where nothing else looks – the depth's lowest bits and the colour of the water pixels themselves – so no extra render target or Sodium API is needed. Every new injection is `require = 0`: a changed target leaves water vanilla's. |
+| World Intro | No mixins of its own. `visual.CameraShowcaseMixin` (camera and lens, before Showcase), `visual.HudShowcaseMixin` (HUD hidden; black, bars and the title card after the HUD), `visual.PhotoInputMixin` / `visual.PhotoMouseMixin` / `visual.MouseHandlerZoomMixin` (any key, click or scroll skips – nothing is cancelled), `visual.ClientClockInstanceMixin` (the day clock for the card), Fabric's `ClientPlayConnectionEvents.JOIN` | The same hooks Showcase and Photo Mode use. |
 | Storm Chaser | No mixins of its own. `GameRendererMixin` (`PostFx.beginLevel`: storm clock, lightning, thunder; `PostFx.afterLevel`: flash relighting, then the bolts), `SkyRendererMixin` (storm clouds over any sky mode), `FogRendererMixin` (colour + distance), `visual.LightmapMixin` (cold, dim light; flashes), `visual.LevelWeatherMixin` (via Ambience: rain / thunder levels), `visual.ClientLevelWeatherMixin` (rain where the biome has none), `CloudRendererMixin` (vanilla clouds hidden under the deck) | The existing hooks already sit where the storm needs to act; the storm only adds to their bodies. Bolts draw with depth test against the finished world, before the hand, so Bloom and grading see them. |
 | Bloom / Color Grading | `GameRendererMixin` → before `applyPostEffects` in `render` | After the hand and entity outlines, before vanilla's post effects and the GUI: one frame copy, the bloom chain, one grade / composite pass. |
 | Lighting | `visual.LightmapMixin` → `LightmapRenderStateExtractor#extract` TAIL, before Ambience fullbright | Sky light colour / factor, block-light tint / factor and ambient colour are all in the render state, once per tick. |
@@ -421,6 +461,11 @@ compile our pipelines. If that fails, every primitive degrades to vanilla fills:
 corners, layered shadow rects, no additive light.
 
 ## Performance notes
+
+* `tools/GpuBench.java` times Liquid Water's passes on your own GPU, offscreen, without the game
+  (minimum of many single-frame samples, so it works with Minecraft open); `tools/ShaderCheck.java`
+  compiles every shader variant – including the patched Sodium and vanilla terrain shaders – with
+  shaderc, as the engine does.
 
 * Our render path allocates nothing in steady state: pooled element states with cached bounds,
   primitive ARGB ints, `TextLabel`s that pre-shape text once, mutable `Smooth`/`Tween` animators,
